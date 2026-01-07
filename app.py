@@ -6,26 +6,25 @@ from graph_view import render_graph
 st.set_page_config(page_title="PAS-X Dashboard", layout="wide")
 st.title("🏭 PAS-X Batch Genealogy & Material Trace Dashboard")
 
-# --- Load Data ---
+# Load data
 batch_id = st.selectbox("Select Batch", ["B001"])
 data = load_mock_batch(batch_id)
 G = build_batch_graph(data)
 
-# --- Sidebar ---
+# Sidebar
 with st.sidebar:
     st.header("Controls")
     dev_mode = st.toggle("Deviation Focus", value=False)
-
     trace_mode = st.radio("Trace Mode",
-                          ["None", "Backward", "Forward", "Bidirectional", "MaterialGenealogy"],
+                          ["None","Backward","Forward","Bidirectional","MaterialGenealogy"],
                           index=0)
-
     node_options = list(G.nodes)
     selected_node = st.selectbox("Select Node", node_options, index=0)
 
-# --- Layout ---
-col_tree,col_graph = st.columns([1,2.5])
+# Layout
+col_tree,col_graph=st.columns([1,2.5])
 
+# Hierarchy Tree
 with col_tree:
     st.subheader("Hierarchy View")
     for phase in data["phases"]:
@@ -36,11 +35,13 @@ with col_tree:
                     if st.button(f"{icon} {pi['name']}",key=pi['id'],use_container_width=True):
                         selected_node=pi['id']
                         st.experimental_rerun()
+
+# Graph
 with col_graph:
     st.subheader("Interactive Batch Graph")
     render_graph(G,selected_node=selected_node,deviation_only=dev_mode,trace_mode=trace_mode)
 
-# --- Details ---
+# Footer / details
 st.divider()
 if selected_node:
     n_data=G.nodes[selected_node]
