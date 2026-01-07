@@ -4,68 +4,264 @@ import networkx as nx
 import json
 
 def render_graph(G, selected_node=None, deviation_only=False, trace_mode="None"):
-    net = Network(height="700px", width="100%", directed=True, bgcolor="#f7f7f7", font_color="#2c3e50")
-    net.toggle_physics(True)
-    net.barnes_hut(gravity=-20000, central_gravity=0.3, spring_length=200, spring_strength=0.05, damping=0.09)
-
+    # Create network with better settings
+    net = Network(
+        height="700px", 
+        width="100%", 
+        directed=True,
+        bgcolor="#ffffff",
+        font_color="#2d3436"
+    )
+    
+    # BETTER LAYOUT SETTINGS
+    net.toggle_physics(False)  # Disable physics for cleaner layout
+    net.force_atlas_2based(
+        gravity=-100,
+        central_gravity=0.01,
+        spring_length=200,
+        spring_strength=0.05,
+        damping=0.4,
+        overlap=0
+    )
+    
     # Material genealogy / trace
     highlight_set = set()
     if selected_node:
-        if trace_mode=="MaterialGenealogy" and G.nodes[selected_node]["type"]=="Material":
+        if trace_mode == "MaterialGenealogy" and G.nodes[selected_node].get("type") == "Material":
             highlight_set.add(selected_node)
             highlight_set.update(nx.ancestors(G, selected_node))
             highlight_set.update(nx.descendants(G, selected_node))
-        elif trace_mode!="None":
+        elif trace_mode != "None":
             highlight_set.add(selected_node)
-            if trace_mode in ["Backward","Bidirectional"]:
+            if trace_mode in ["Backward", "Bidirectional"]:
                 highlight_set.update(nx.ancestors(G, selected_node))
-            if trace_mode in ["Forward","Bidirectional"]:
+            if trace_mode in ["Forward", "Bidirectional"]:
                 highlight_set.update(nx.descendants(G, selected_node))
-
-    # Nodes
+    
+    # === IMPROVED NODE STYLING ===
     for node_id, data in G.nodes(data=True):
+        # Calculate opacity
         opacity = 1.0
-        if deviation_only and data.get("result")!="FAIL": opacity=0.1
-        if highlight_set and node_id not in highlight_set: opacity=0.1
-
-        shape,size,color="dot",20,"#3498db"
-        if data["type"]=="Batch": shape,size,color="star",50,"#f39c12"
-        elif data["type"]=="Phase": shape,size,color="triangle",35,"#2ecc71"
-        elif data["type"]=="PI": shape,size,color="box",30,"#e74c3c" if data.get("result")=="FAIL" else "#9b59b6"
-        elif data["type"]=="Material": shape,size,color="ellipse",25,"#34495e"
-        if node_id==selected_node: shape,size,color="diamond",45,"#f1c40f"
-
-        tooltip_lines=[f"<b>{data['label']}</b>", f"Type: {data['type']}"]
-        for k in ["parameters","limits","timestamp","deviation"]:
-            if k in data and data[k]: tooltip_lines.append(f"{k}: {json.dumps(data[k])}")
-        tooltip_html="<br>".join(tooltip_lines)
-
-        net.add_node(node_id,label=data["label"],shape=shape,size=size,color=color,opacity=opacity,title=tooltip_html)
-
-    # Edges
-    for u,v,data_edge in G.edges(data=True):
-        edge_color,width,arrows="#bdc3c7",2,"to"
+        if deviation_only and data.get("result") != "FAIL":
+            opacity = 0.3
+        if highlight_set and node_id not in highlight_set:
+            opacity = 0.3
+        
+        # Determine node properties with better colors
+        shape, size, color, border_color, border_width = "dot", 20, "#3498db", "#2c3e50", 2
+        
+        if data["type"] == "Batch":
+            shape, size, color, border_color = "star", 35, "#f39c12", "#d68910"
+        elif data["type"] == "Phase":
+            shape, size, color, border_color = "triangle", 28, "#2ecc71", "#27ae60"
+        elif data["type"] == "PI":
+            if data.get("result") == "FAIL":
+                shape, size, color, border_color = "box", 25, "#e74c3c", "#c0392b"
+            else:
+                shape, size, color, border_color = "box", 25, "#9b59b6", "#8e44ad"
+        elif data["type"] == "Material":
+            shape, size, color, border_color = "ellipse", 22, "#34495e", "#2c3e50"
+        
+        # Highlight selected node
+        if node_id == selected_node:
+            shape, size, color, border_color, border_width = "diamond", 35, "#f1c40f", "#f39c12", 3
+        
+        # Build tooltip
+        tooltip_lines = [f"<b>{data['label']}</b>", f"Type: {data['type']}"]
+        if data.get("result"):
+            tooltip_lines.append(f"Result: {data['result']}")
+        for k in ["parameters", "limits", "timestamp", "deviation", "product", "status"]:
+            if k in data and data[k]:
+                if isinstance(data[k], dict):
+                    tooltip_lines.append(f"{k}: {json.dumps(data[k], indent=2).replace('\"', '')}")
+                else:
+                    tooltip_lines.append(f"{k}: {data[k]}")
+        tooltip_html = "<br>".join(tooltip_lines)
+        
+        # Add node with improved styling
+        net.add_node(
+            node_id,
+            label=data["label"],
+            shape=shape,
+            size=size,
+            color=color,
+            opacity=opacity,
+            title=tooltip_html,
+            borderWidth=border_width,
+            borderWidthSelected=border_width * 2,
+            borderColor=border_color,
+            font={
+                "size": 14,
+                "face": "Arial",
+                "color": "#2d3436",
+                "strokeWidth": 0,
+                "strokeColor": "#ffffff"
+            },
+            shadow={
+                "enabled": True,
+                "color": "rgba(0,0,0,0.15)",
+                "size": 5,
+                "x": 2,
+                "y": 2
+            }
+        )
+    
+    # === IMPROVED EDGE STYLING ===
+    for u, v, data_edge in G.edges(data=True):
+        edge_color, width, arrows, dashes = "#95a5a6", 2, "to", False
+        
+        # Highlight edges in trace mode
         if highlight_set and u in highlight_set and v in highlight_set:
-            edge_color,width="#2c3e50",4
-        net.add_edge(u,v,label=data_edge["relationship"],color=edge_color,width=width,arrows=arrows)
-
-    # Hierarchical layout
+            edge_color, width = "#2c3e50", 4
+        
+        # Style edges by relationship type
+        rel = data_edge.get("relationship", "")
+        if rel == "has_phase":
+            edge_color, dashes = "#3498db", False
+        elif rel == "has_pi":
+            edge_color, dashes = "#9b59b6", [5, 5]
+        elif rel == "next_phase" or rel == "next_step":
+            edge_color, width = "#2ecc71", 3
+        elif rel == "consumed_by":
+            edge_color, dashes = "#e74c3c", [10, 5]
+        elif rel == "produced":
+            edge_color, dashes = "#f39c12", [5, 10]
+        
+        net.add_edge(
+            u, v,
+            label=data_edge["relationship"],
+            color=edge_color,
+            width=width,
+            arrows=arrows,
+            dashes=dashes,
+            font={
+                "size": 12,
+                "align": "middle"
+            },
+            smooth={
+                "type": "cubicBezier",
+                "roundness": 0.4
+            }
+        )
+    
+    # === BETTER LAYOUT CONFIGURATION ===
     net.set_options("""
     var options = {
-      "layout": { "hierarchical": { "enabled": true, "levelSeparation": 120, "nodeSpacing": 150, "treeSpacing": 200, "direction": "UD", "sortMethod": "hubsize" } },
-      "physics": { "enabled": false }
+      "nodes": {
+        "scaling": {
+          "min": 10,
+          "max": 50,
+          "label": {
+            "enabled": true,
+            "min": 12,
+            "max": 20
+          }
+        }
+      },
+      "edges": {
+        "smooth": {
+          "type": "cubicBezier",
+          "forceDirection": "horizontal",
+          "roundness": 0.4
+        },
+        "font": {
+          "size": 12,
+          "align": "middle"
+        }
+      },
+      "physics": {
+        "enabled": true,
+        "solver": "forceAtlas2Based",
+        "forceAtlas2Based": {
+          "gravitationalConstant": -100,
+          "centralGravity": 0.01,
+          "springLength": 200,
+          "springConstant": 0.05,
+          "damping": 0.4,
+          "avoidOverlap": 1
+        },
+        "stabilization": {
+          "enabled": true,
+          "iterations": 500,
+          "updateInterval": 25,
+          "fit": true
+        },
+        "timestep": 0.5,
+        "adaptiveTimestep": true
+      },
+      "layout": {
+        "improvedLayout": true,
+        "hierarchical": {
+          "enabled": false
+        }
+      },
+      "interaction": {
+        "dragNodes": true,
+        "dragView": true,
+        "zoomView": true,
+        "hover": true,
+        "tooltipDelay": 200,
+        "multiselect": true
+      }
     }
     """)
-
-    # Legend
-    legend_html="""
-    <div style="padding:10px; font-size:12px; background-color:#ecf0f1; border-radius:5px; border:1px solid #bdc3c7">
-    <b>Legend:</b><br>
-    ⭐ Batch | 🔺 Phase | ▢ PI | 📦 Material<br>
-    ✅ PASS | ❌ FAIL | 💛 Selected<br>
-    Arrows = Flow / Sequence
+    
+    # === IMPROVED LEGEND ===
+    legend_html = """
+    <div style="
+        position: absolute; 
+        top: 10px; 
+        right: 10px; 
+        padding: 12px 15px; 
+        font-size: 13px; 
+        background-color: rgba(255,255,255,0.95); 
+        border-radius: 8px; 
+        border: 1px solid #dfe6e9; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        z-index: 1000;
+        max-width: 250px;
+    ">
+        <div style="font-weight: bold; margin-bottom: 8px; color: #2d3436; font-size: 14px;">📊 Legend</div>
+        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <div style="width: 12px; height: 12px; background-color: #f39c12; border-radius: 2px; margin-right: 8px;"></div>
+            <span>Batch</span>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <div style="width: 12px; height: 12px; background-color: #2ecc71; border-radius: 2px; margin-right: 8px;"></div>
+            <span>Phase</span>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <div style="width: 12px; height: 12px; background-color: #9b59b6; border-radius: 2px; margin-right: 8px;"></div>
+            <span>PI (PASS)</span>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <div style="width: 12px; height: 12px; background-color: #e74c3c; border-radius: 2px; margin-right: 8px;"></div>
+            <span>PI (FAIL)</span>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <div style="width: 12px; height: 12px; background-color: #34495e; border-radius: 2px; margin-right: 8px;"></div>
+            <span>Material</span>
+        </div>
+        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #dfe6e9; font-size: 12px; color: #636e72;">
+            🔸 Click nodes for details<br>
+            🔸 Drag to rearrange<br>
+            🔸 Scroll to zoom
+        </div>
     </div>
     """
-    net.add_node("LegendNode",label="",x=-5000,y=-5000,physics=False,shape="html",title=legend_html)
+    
+    # Save and render
     net.save_graph("batch_tree.html")
-    components.html(open("batch_tree.html","r").read(),height=700)
+    
+    # Inject legend into HTML
+    with open("batch_tree.html", "r") as f:
+        html_content = f.read()
+    
+    # Add legend at the end of body
+    html_content = html_content.replace('</body>', f'{legend_html}</body>')
+    
+    # Write back and render
+    with open("batch_tree.html", "w") as f:
+        f.write(html_content)
+    
+    components.html(open("batch_tree.html", "r").read(), height=750, scrolling=False)
