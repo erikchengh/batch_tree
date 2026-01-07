@@ -34,7 +34,7 @@ with col_tree:
                     icon="❌" if pi["result"]=="FAIL" else "✅"
                     if st.button(f"{icon} {pi['name']}",key=pi['id'],use_container_width=True):
                         selected_node=pi['id']
-                        st.experimental_rerun()
+                        st.rerun()
 
 # Graph
 with col_graph:
