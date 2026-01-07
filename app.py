@@ -3,8 +3,8 @@ from data_mock import load_mock_batch
 from model import build_batch_graph
 from graph_view import render_graph
 
-st.set_page_config(page_title="PAS-X Dashboard", layout="wide")
-st.title("🏭 PAS-X Batch Genealogy & Material Trace Dashboard")
+st.set_page_config(page_title="MES Dashboard", layout="wide")
+st.title("🏭 MES Batch Genealogy & Material Trace Dashboard")
 
 # Load data
 batch_id = st.selectbox("Select Batch", ["B001"])
