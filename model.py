@@ -2,75 +2,91 @@ import networkx as nx
 import pandas as pd
 from data_mock import generate_batch_data
 
-def build_batch_genealogy_graph(target_batch_id=None):
+def build_batch_genealogy_graph():
     """Build a directed graph of batch genealogy relationships"""
     data = generate_batch_data()
     G = nx.DiGraph()
     
     # Add all batches as nodes
     for _, batch in data["batches"].iterrows():
+        # Determine batch type
+        batch_id = str(batch["batch_id"])  # Ensure it's a string
         batch_type = (
-            "Raw Material" if batch["batch_id"].startswith("RM-") else
-            "Intermediate" if batch["batch_id"].startswith("INT-") else
-            "Finished Product"
+            "Raw Material" if batch_id.startswith("RM-") else
+            "Intermediate" if batch_id.startswith("INT-") else
+            "Finished Product" if batch_id.startswith("FP-") else
+            "Unknown"
         )
         
         # Node styling based on batch type
         color = {
             "Raw Material": "#3498db",      # Blue
             "Intermediate": "#9b59b6",      # Purple
-            "Finished Product": "#2ecc71"   # Green
+            "Finished Product": "#2ecc71",   # Green
+            "Unknown": "#95a5a6"            # Gray
         }.get(batch_type, "#95a5a6")
         
         shape = {
             "Raw Material": "ellipse",
             "Intermediate": "box",
-            "Finished Product": "star"
+            "Finished Product": "star",
+            "Unknown": "circle"
         }.get(batch_type, "circle")
         
         size = {
-            "Raw Material": 20,
-            "Intermediate": 25,
-            "Finished Product": 35
+            "Raw Material": 25,
+            "Intermediate": 30,
+            "Finished Product": 35,
+            "Unknown": 20
         }.get(batch_type, 20)
         
+        # Create label (show batch ID and material name)
+        material = str(batch.get("material", "Unknown"))
+        label = f"{batch_id}\n{material[:20]}{'...' if len(material) > 20 else ''}"
+        
         G.add_node(
-            batch["batch_id"],
-            label=f"{batch['batch_id']}\n{batch['material']}",
+            batch_id,
+            label=label,
             type=batch_type,
-            material=batch["material"],
-            product=batch.get("product", ""),
-            quantity=f"{batch['quantity']} {batch['unit']}",
-            status=batch.get("status", ""),
-            quality=batch.get("quality", ""),
+            material=material,
+            product=str(batch.get("product", "")),
+            quantity=f"{batch.get('quantity', 'N/A')} {batch.get('unit', '')}",
+            status=str(batch.get("status", "")),
+            quality=str(batch.get("quality", "")),
             color=color,
             shape=shape,
-            size=size
+            size=size,
+            batch_id=batch_id  # Also store as attribute for reference
         )
     
     # Add genealogy relationships as edges
     for _, rel in data["genealogy"].iterrows():
-        edge_label = rel["relationship"]
-        if rel["quantity"]:
-            edge_label += f"\n{rel['quantity']} {rel['unit']}"
+        parent = str(rel["parent_batch"])
+        child = str(rel["child_batch"])
         
-        # Edge styling based on relationship type
-        edge_color = {
-            "consumed_by": "#e74c3c",    # Red
-            "precedes": "#3498db",       # Blue
-            "coated_with": "#f39c12",    # Orange
-        }.get(rel["relationship"], "#95a5a6")
-        
-        G.add_edge(
-            rel["parent_batch"],
-            rel["child_batch"],
-            label=edge_label,
-            relationship=rel["relationship"],
-            quantity=rel["quantity"],
-            unit=rel["unit"],
-            color=edge_color,
-            width=2
-        )
+        # Only add edge if both nodes exist
+        if parent in G.nodes and child in G.nodes:
+            edge_label = str(rel["relationship"])
+            if pd.notna(rel.get("quantity")):
+                edge_label += f"\n{rel['quantity']} {rel.get('unit', '')}"
+            
+            # Edge styling based on relationship type
+            edge_color = {
+                "consumed_by": "#e74c3c",    # Red
+                "precedes": "#3498db",       # Blue
+                "coated_with": "#f39c12",    # Orange
+            }.get(str(rel["relationship"]), "#95a5a6")
+            
+            G.add_edge(
+                parent,
+                child,
+                label=edge_label,
+                relationship=str(rel["relationship"]),
+                quantity=rel.get("quantity"),
+                unit=rel.get("unit"),
+                color=edge_color,
+                width=2
+            )
     
     return G, data
 
@@ -91,16 +107,16 @@ def get_bom_list(batch_id):
         if not parent_batch.empty:
             batch_info = parent_batch.iloc[0]
             bom_list.append({
-                "Batch ID": item["parent_batch"],
-                "Material": batch_info["material"],
+                "Batch ID": str(item["parent_batch"]),
+                "Material": str(batch_info["material"]),
                 "Quantity": item["quantity"],
-                "Unit": item["unit"],
+                "Unit": str(item["unit"]),
                 "Type": (
-                    "Raw Material" if item["parent_batch"].startswith("RM-") else
-                    "Intermediate" if item["parent_batch"].startswith("INT-") else
+                    "Raw Material" if str(item["parent_batch"]).startswith("RM-") else
+                    "Intermediate" if str(item["parent_batch"]).startswith("INT-") else
                     "Component"
                 ),
-                "Status": batch_info.get("quality", "N/A")
+                "Status": str(batch_info.get("quality", "N/A"))
             })
     
     return pd.DataFrame(bom_list)
@@ -108,25 +124,9 @@ def get_bom_list(batch_id):
 def get_product_list():
     """Get list of all finished products"""
     data = generate_batch_data()
-    return data["finished"][["batch_id", "material", "quantity", "unit", "manufacturing_date", "expiry"]]
-
-# In build_batch_genealogy_graph function:
-def build_batch_genealogy_graph():
-    G = nx.DiGraph()
+    finished_df = data["finished"].copy()
     
-    # Add nodes like this:
-    G.add_node(
-        batch["batch_id"],
-        label=f"{batch['batch_id']}\n{batch['material']}",  # REQUIRED
-        type=batch_type,  # REQUIRED: "Raw Material", "Intermediate", or "Finished Product"
-        material=batch["material"],
-        product=batch.get("product", ""),
-        quantity=f"{batch['quantity']} {batch['unit']}",
-        status=batch.get("status", ""),
-        quality=batch.get("quality", ""),
-        color=color,        # REQUIRED for coloring
-        shape=shape,        # REQUIRED: "ellipse", "box", or "star"
-        size=size           # REQUIRED: 20, 25, or 35
-    )
+    # Ensure batch_id is string
+    finished_df["batch_id"] = finished_df["batch_id"].astype(str)
     
-    return G, data
+    return finished_df[["batch_id", "material", "quantity", "unit", "manufacturing_date", "expiry"]]
