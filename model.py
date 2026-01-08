@@ -130,3 +130,34 @@ def get_product_list():
     finished_df["batch_id"] = finished_df["batch_id"].astype(str)
     
     return finished_df[["batch_id", "material", "quantity", "unit", "manufacturing_date", "expiry"]]
+
+def enhance_pharma_data(data):
+    """Enhance batch data with pharmaceutical metadata"""
+    for _, batch in data["batches"].iterrows():
+        batch_id = str(batch["batch_id"])
+        material = str(batch.get("material", ""))
+        
+        # Add pharmaceutical classification
+        if "API" in material.upper():
+            batch["pharma_class"] = "Active Pharmaceutical Ingredient"
+            batch["risk_level"] = "High"
+        elif any(x in material.upper() for x in ["EXCIPIENT", "FILLER", "BINDER", "LUBRICANT"]):
+            batch["pharma_class"] = "Excipient"
+            batch["risk_level"] = "Medium"
+        elif "SOLVENT" in material.upper() or "WATER" in material.upper():
+            batch["pharma_class"] = "Solvent"
+            batch["risk_level"] = "Medium"
+        elif "BLEND" in material.upper():
+            batch["pharma_class"] = "Intermediate Blend"
+            batch["risk_level"] = "Medium"
+        elif "TABLET" in material.upper():
+            batch["pharma_class"] = "Solid Dosage Form"
+            batch["risk_level"] = "Critical"
+        elif "CAPSULE" in material.upper():
+            batch["pharma_class"] = "Solid Dosage Form"
+            batch["risk_level"] = "Critical"
+        else:
+            batch["pharma_class"] = "Other"
+            batch["risk_level"] = "Low"
+    
+    return data
