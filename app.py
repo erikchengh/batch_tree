@@ -70,7 +70,7 @@ with col_tree:
                     use_container_width=True
                 ):
                     selected_node = pi["id"]
-                    st.experimental_rerun()
+                    st.rerun()
 
                 st.markdown(
                     f"<div style='margin-left:12px; color:{status_color}; font-size:12px;'>"
