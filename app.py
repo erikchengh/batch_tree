@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import networkx as nx
 from model import build_batch_genealogy_graph, get_bom_list, get_product_list, analyze_graph
 from graph_view import render_genealogy_graph
 
@@ -12,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Custom CSS for better appearance
 st.markdown("""
 <style>
     .main-header {
@@ -30,15 +29,16 @@ st.markdown("""
     .stButton button {
         background-color: #1e88e5;
         color: white;
-        border-radius: 5px;
+        border-radius: 8px;
         padding: 0.5rem 1rem;
+        font-weight: 600;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # Title
 st.markdown('<h1 class="main-header">🏭 Pharmaceutical Batch Genealogy System</h1>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Track material flow, traceability, and batch relationships across manufacturing processes</p>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">Professional Batch Tree Visualization for Pharma Manufacturing</p>', unsafe_allow_html=True)
 
 # Initialize session state
 if 'graph_loaded' not in st.session_state:
@@ -48,21 +48,21 @@ if 'G' not in st.session_state:
 if 'data' not in st.session_state:
     st.session_state.data = None
 
-# Load data button
-col1, col2, col3 = st.columns([1, 2, 1])
-with col2:
-    if st.button("🚀 Load Batch Genealogy Data", use_container_width=True):
-        with st.spinner("Loading batch data and building genealogy graph..."):
-            try:
-                # Try to build graph
-                G, data = build_batch_genealogy_graph()
-                st.session_state.G = G
-                st.session_state.data = data
-                st.session_state.graph_loaded = True
-                st.success("✅ Data loaded successfully!")
-            except Exception as e:
-                st.error(f"❌ Error loading data: {str(e)}")
-                st.session_state.graph_loaded = False
+# Main container
+with st.container():
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("🚀 Load & Visualize Batch Tree", use_container_width=True, type="primary"):
+            with st.spinner("🌱 Building pharmaceutical batch tree..."):
+                try:
+                    G, data = build_batch_genealogy_graph()
+                    st.session_state.G = G
+                    st.session_state.data = data
+                    st.session_state.graph_loaded = True
+                    st.success("✅ Batch tree loaded successfully!")
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
+                    st.session_state.graph_loaded = False
 
 # Main app logic
 if st.session_state.graph_loaded and st.session_state.G is not None:
@@ -71,12 +71,12 @@ if st.session_state.graph_loaded and st.session_state.G is not None:
     
     # Sidebar
     with st.sidebar:
-        st.markdown("### 📊 Graph Statistics")
+        st.markdown("### 📊 Tree Statistics")
         
         # Show graph stats
         stats = analyze_graph(G)
         st.metric("Total Batches", stats["total_nodes"])
-        st.metric("Total Relationships", stats["total_edges"])
+        st.metric("Total Connections", stats["total_edges"])
         
         col_a, col_b = st.columns(2)
         with col_a:
@@ -93,10 +93,10 @@ if st.session_state.graph_loaded and st.session_state.G is not None:
         
         if finished_products:
             selected_batch = st.selectbox(
-                "Select Target Batch",
+                "Select Target Product",
                 options=finished_products,
                 index=0,
-                help="Select a finished product batch to trace its genealogy"
+                help="Select a finished product to view its material genealogy"
             )
         else:
             selected_batch = None
@@ -104,117 +104,163 @@ if st.session_state.graph_loaded and st.session_state.G is not None:
         
         st.divider()
         
-        st.markdown("### 🔬 Trace Mode")
-        trace_mode = st.radio(
-            "Select Trace Direction",
-            ["none", "forward", "backward", "both"],
+        st.markdown("### 🎨 Tree Options")
+        tree_style = st.radio(
+            "Tree Display Style",
+            ["standard", "compact", "detailed"],
             index=0,
-            format_func=lambda x: {
-                "none": "🟢 Full Graph View",
-                "forward": "➡️ Downstream Trace",
-                "backward": "⬅️ Upstream Trace",
-                "both": "↔️ Complete Trace"
-            }[x],
-            help="Select how to trace materials through the supply chain"
+            help="Choose how to display the tree structure"
         )
         
         st.divider()
         
-        # Debug info
-        with st.expander("🔧 Debug Information"):
-            st.write(f"Graph has {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
-            st.write(f"Selected batch: {selected_batch}")
-            st.write(f"Trace mode: {trace_mode}")
+        # Quick actions
+        st.markdown("### ⚡ Quick Actions")
+        if st.button("🔄 Refresh Tree", use_container_width=True):
+            st.rerun()
+        
+        if st.button("📥 Export Tree Data", use_container_width=True):
+            # Create download data
+            import json
+            tree_data = {
+                "nodes": list(G.nodes(data=True)),
+                "edges": list(G.edges(data=True))
+            }
+            st.download_button(
+                label="Download JSON",
+                data=json.dumps(tree_data, indent=2),
+                file_name="batch_tree.json",
+                mime="application/json"
+            )
     
-    # Main layout
-    col1, col2 = st.columns([2, 1])
+    # Main content area
+    tab1, tab2 = st.tabs(["🌳 Batch Tree Visualization", "📋 Batch Details"])
     
-    with col1:
-        st.markdown("### 📈 Batch Genealogy Graph")
+    with tab1:
+        st.markdown("### 📈 Material Genealogy Tree")
         
         if selected_batch:
             # Show selected batch info
             node_data = G.nodes[selected_batch]
-            st.info(f"**Selected Batch:** {selected_batch} - {node_data.get('material', 'Unknown material')}")
+            st.info(f"""
+            **Selected Product:** `{selected_batch}`  
+            **Material:** {node_data.get('material', 'Unknown')}  
+            **Quantity:** {node_data.get('quantity', 'N/A')} {node_data.get('unit', '')}
+            """)
             
             # Render the graph
             render_genealogy_graph(
                 G, 
                 target_batch_id=selected_batch,
-                trace_mode=trace_mode
+                trace_mode="none"
             )
         else:
-            st.info("Select a batch from the sidebar to visualize its genealogy")
+            st.info("👈 Select a batch from the sidebar to visualize its genealogy")
     
-    with col2:
-        st.markdown("### 📋 Batch Details")
-        
+    with tab2:
         if selected_batch:
-            node_data = G.nodes[selected_batch]
+            col1, col2 = st.columns([1, 1])
             
-            # Display batch details in a nice format
-            st.markdown(f"**Batch ID:** `{selected_batch}`")
-            st.markdown(f"**Material:** {node_data.get('material', 'N/A')}")
-            st.markdown(f"**Type:** {node_data.get('type', 'N/A')}")
-            st.markdown(f"**Quantity:** {node_data.get('quantity', 'N/A')} {node_data.get('unit', '')}")
-            st.markdown(f"**Status:** {node_data.get('status', 'N/A')}")
-            st.markdown(f"**Quality:** {node_data.get('quality', 'N/A')}")
+            with col1:
+                st.markdown("#### 📄 Batch Information")
+                node_data = G.nodes[selected_batch]
+                
+                info_card = f"""
+                <div style="background: white; padding: 20px; border-radius: 10px; border-left: 4px solid #1e88e5; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                    <div style="display: flex; align-items: center; margin-bottom: 15px;">
+                        <span style="font-size: 24px; margin-right: 10px;">💊</span>
+                        <div>
+                            <div style="font-weight: 700; color: #1a3c6e; font-size: 16px;">{selected_batch}</div>
+                            <div style="color: #5d7fa3; font-size: 14px;">{node_data.get('material', 'Unknown Material')}</div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 15px;">
+                        <div style="background: #f8fafc; padding: 10px; border-radius: 6px;">
+                            <div style="color: #64748b; font-size: 12px;">Type</div>
+                            <div style="color: #1e293b; font-weight: 600; font-size: 14px;">{node_data.get('type', 'N/A')}</div>
+                        </div>
+                        
+                        <div style="background: #f8fafc; padding: 10px; border-radius: 6px;">
+                            <div style="color: #64748b; font-size: 12px;">Status</div>
+                            <div style="color: #1e293b; font-weight: 600; font-size: 14px;">{node_data.get('status', 'N/A')}</div>
+                        </div>
+                        
+                        <div style="background: #f8fafc; padding: 10px; border-radius: 6px;">
+                            <div style="color: #64748b; font-size: 12px;">Quantity</div>
+                            <div style="color: #1e293b; font-weight: 600; font-size: 14px;">{node_data.get('quantity', 'N/A')} {node_data.get('unit', '')}</div>
+                        </div>
+                        
+                        <div style="background: #f8fafc; padding: 10px; border-radius: 6px;">
+                            <div style="color: #64748b; font-size: 12px;">Quality</div>
+                            <div style="color: #1e293b; font-weight: 600; font-size: 14px;">{node_data.get('quality', 'N/A')}</div>
+                        </div>
+                    </div>
+                </div>
+                """
+                st.markdown(info_card, unsafe_allow_html=True)
             
-            if 'product' in node_data:
-                st.markdown(f"**Product:** {node_data.get('product', 'N/A')}")
-            if 'expiry_date' in node_data:
-                st.markdown(f"**Expiry Date:** {node_data.get('expiry_date', 'N/A')}")
-            if 'manufacturing_date' in node_data:
-                st.markdown(f"**Manufacturing Date:** {node_data.get('manufacturing_date', 'N/A')}")
+            with col2:
+                st.markdown("#### 📦 Bill of Materials")
+                bom_df = get_bom_list(selected_batch)
+                if not bom_df.empty:
+                    # Style the DataFrame
+                    st.dataframe(
+                        bom_df,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "material": "Material",
+                            "batch_id": "Batch ID",
+                            "quantity": "Quantity",
+                            "unit": "Unit",
+                            "type": "Type",
+                            "status": "Status"
+                        }
+                    )
+                    
+                    # Calculate total materials
+                    total_qty = bom_df['quantity'].sum() if 'quantity' in bom_df.columns else 0
+                    st.metric("Total Raw Materials Used", f"{len(bom_df)} items", f"{total_qty:.1f} total units")
+                else:
+                    st.info("No BOM data available for this batch")
             
-            st.divider()
+            # Connected batches section
+            st.markdown("#### 🔗 Connected Batches")
+            col1, col2 = st.columns(2)
             
-            # Show BOM
-            bom_df = get_bom_list(selected_batch)
-            if not bom_df.empty:
-                st.markdown("**📦 Bill of Materials (BOM):**")
-                st.dataframe(bom_df, use_container_width=True)
-            else:
-                st.info("No BOM data available for this batch")
+            with col1:
+                # Predecessors (what went into this batch)
+                predecessors = list(G.predecessors(selected_batch))
+                if predecessors:
+                    st.markdown("**Input Materials:**")
+                    for pred in predecessors[:5]:  # Show first 5
+                        pred_data = G.nodes[pred]
+                        st.markdown(f"- `{pred}`: {pred_data.get('material', 'Unknown')}")
+                    if len(predecessors) > 5:
+                        st.caption(f"... and {len(predecessors) - 5} more")
+                else:
+                    st.info("No direct input materials")
             
-            st.divider()
-            
-            # Show connected batches
-            st.markdown("**🔗 Connected Batches:**")
-            
-            # Predecessors (what went into this batch)
-            predecessors = list(G.predecessors(selected_batch))
-            if predecessors:
-                st.markdown("**Inputs (Predecessors):**")
-                for pred in predecessors:
-                    pred_data = G.nodes[pred]
-                    st.markdown(f"- `{pred}`: {pred_data.get('material', '')}")
-            else:
-                st.markdown("No direct inputs found")
-            
-            # Successors (what this batch produced)
-            successors = list(G.successors(selected_batch))
-            if successors:
-                st.markdown("**Outputs (Successors):**")
-                for succ in successors:
-                    succ_data = G.nodes[succ]
-                    st.markdown(f"- `{succ}`: {succ_data.get('material', '')}")
-            else:
-                st.markdown("No direct outputs found")
-            
-            st.divider()
-            
-            # Raw data for debugging
-            with st.expander("📄 View Raw Node Data"):
-                st.json(node_data)
+            with col2:
+                # Successors (what this batch produced)
+                successors = list(G.successors(selected_batch))
+                if successors:
+                    st.markdown("**Output Products:**")
+                    for succ in successors[:5]:  # Show first 5
+                        succ_data = G.nodes[succ]
+                        st.markdown(f"- `{succ}`: {succ_data.get('material', 'Unknown')}")
+                    if len(successors) > 5:
+                        st.caption(f"... and {len(successors) - 5} more")
+                else:
+                    st.info("No direct output products")
+        
         else:
-            st.info("Select a batch to see details")
+            st.info("👈 Select a batch from the sidebar to view details")
     
-    # Bottom section
+    # Footer information
     st.divider()
-    
     col1, col2, col3 = st.columns(3)
-    
     with col1:
         with st.expander("📋 All Batches"):
             batch_list = []
@@ -227,77 +273,67 @@ if st.session_state.graph_loaded and st.session_state.G is not None:
                     "Quantity": node_data.get('quantity', ''),
                     "Status": node_data.get('status', '')
                 })
-            st.dataframe(pd.DataFrame(batch_list))
+            st.dataframe(pd.DataFrame(batch_list), use_container_width=True)
     
     with col2:
-        with st.expander("🔄 All Relationships"):
+        with st.expander("🔄 All Connections"):
             edge_list = []
             for u, v, data in G.edges(data=True):
                 edge_list.append({
                     "From": u,
                     "To": v,
-                    "Relationship": data.get('relationship', 'unknown'),
                     "Quantity": data.get('quantity', ''),
                     "Unit": data.get('unit', '')
                 })
-            st.dataframe(pd.DataFrame(edge_list))
+            st.dataframe(pd.DataFrame(edge_list), use_container_width=True)
     
     with col3:
-        with st.expander("📊 Graph Analysis"):
-            st.write(stats)
-            if stats["is_connected"]:
-                st.success("Graph is connected")
-            else:
-                st.warning("Graph is not fully connected")
+        with st.expander("📊 Tree Analysis"):
+            st.json(stats)
             
-            # Calculate and show degree centrality
+            # Show degree centrality
             if G.number_of_nodes() > 0:
                 in_degrees = dict(G.in_degree())
                 out_degrees = dict(G.out_degree())
                 
                 # Find most connected nodes
-                most_inputs = max(in_degrees.items(), key=lambda x: x[1]) if in_degrees else (None, 0)
-                most_outputs = max(out_degrees.items(), key=lambda x: x[1]) if out_degrees else (None, 0)
+                if in_degrees:
+                    most_inputs = max(in_degrees.items(), key=lambda x: x[1])
+                    st.metric("Most Inputs", f"{most_inputs[0]}", f"{most_inputs[1]} connections")
                 
-                st.markdown(f"**Most inputs:** {most_inputs[0]} ({most_inputs[1]} inputs)")
-                st.markdown(f"**Most outputs:** {most_outputs[0]} ({most_outputs[1]} outputs)")
+                if out_degrees:
+                    most_outputs = max(out_degrees.items(), key=lambda x: x[1])
+                    st.metric("Most Outputs", f"{most_outputs[0]}", f"{most_outputs[1]} connections")
 
 else:
     # Show welcome/loading screen
-    st.markdown("""
-    ## Welcome to the Pharma Batch Genealogy System
-    
-    This system helps you visualize and trace the flow of materials through pharmaceutical manufacturing processes.
-    
-    ### 🚀 Getting Started:
-    1. Click the **"Load Batch Genealogy Data"** button above
-    2. Select a finished product batch from the sidebar
-    3. Choose a trace mode to visualize material flow
-    4. Explore the genealogy graph and batch details
-    
-    ### 📊 What you can do:
-    - **Trace upstream**: See what raw materials went into a product
-    - **Trace downstream**: See what products were made from a material
-    - **View BOM**: See the Bill of Materials for any batch
-    - **Analyze relationships**: Understand material flow across processes
-    
-    ### ⚠️ If you see an empty graph:
-    - Make sure the data files are properly formatted
-    - Check that the graph construction logic is correct
-    - Verify that nodes have proper attributes (type, material, etc.)
-    
-    Click the button above to load the demo data and get started!
-    """)
-    
-    # Show sample data structure
-    with st.expander("📁 Expected Data Structure"):
+    with st.container():
         st.markdown("""
-        Your data should include columns like:
-        - `batch_id`: Unique identifier for each batch
-        - `type`: "Raw Material", "Intermediate", or "Finished Product"
-        - `material`: Description of the material
-        - `quantity`: Amount
-        - `unit`: Unit of measurement
-        - `status`: Batch status
-        - `quality`: Quality grade
+        ## 🌳 Welcome to Pharma Batch Tree
+        
+        This system visualizes pharmaceutical batch genealogy as a clean, professional tree structure.
+        
+        ### 🎯 Features:
+        - **🌳 Tree Visualization**: See raw materials → finished products as a proper tree
+        - **🧪 Pharma Icons**: Professional pharmaceutical icons (API 🧪, Excipients 📦, Tablets 💊)
+        - **🔍 Interactive**: Hover for details, drag to rearrange, zoom in/out
+        - **📊 Professional**: GMP-compliant styling with pharmaceutical color scheme
+        
+        ### 🚀 How to use:
+        1. Click **"Load & Visualize Batch Tree"** above
+        2. Select a finished product from the sidebar
+        3. Explore the tree visualization in the main panel
+        4. View batch details and Bill of Materials in the details tab
+        
+        ### 🏭 Sample Data Includes:
+        - **Raw Materials**: API batches, excipients, solvents
+        - **Finished Products**: Tablets, capsules with batch information
+        - **Direct Connections**: Clear material flow without intermediate clutter
+        
+        Click the button above to load the demo and get started!
         """)
+        
+        # Show sample tree structure
+        with st.expander("🌲 Sample Tree Structure"):
+            st.image("https://raw.githubusercontent.com/streamlit/streamlit/develop/docs/images/tree_structure.png", 
+                    caption="Example of tree visualization", use_column_width=True)
