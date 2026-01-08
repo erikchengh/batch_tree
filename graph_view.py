@@ -5,6 +5,7 @@ import tempfile
 import os
 import json
 import re
+import streamlit as st
 
 def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
     """
@@ -15,6 +16,13 @@ def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
         target_batch_id: Batch to focus on
         trace_mode: "none", "forward", "backward", "both"
     """
+    
+    # Check if graph is empty
+    if G.number_of_nodes() == 0:
+        st.warning("⚠️ No graph data available. Please check your data source.")
+        return
+    
+    st.info(f"📊 Rendering graph with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
     
     # Create network with pharma professional theme
     net = Network(
@@ -34,17 +42,34 @@ def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
     # Calculate professional hierarchical positions
     positions = calculate_pharma_positions(G, target_batch_id)
     
+    # Debug: Show node count
+    if len(positions) == 0:
+        # Fallback to automatic layout if no positions calculated
+        st.warning("⚠️ Using automatic layout. No specific positions calculated.")
+    
     # === ADD PHARMA-STYLED NODES ===
+    nodes_added = 0
     for node_id, node_data in G.nodes(data=True):
+        # Ensure node_data is a dictionary
+        if not isinstance(node_data, dict):
+            node_data = {}
+        
         # Get pharma-specific styling
         styling = get_pharma_node_styling(node_data, node_id, target_batch_id, node_id in highlight_nodes)
         
         # Get position
         pos = positions.get(node_id, {"x": None, "y": None})
         
+        # Use automatic positioning if not set
+        if pos["x"] is None or pos["y"] is None:
+            # Spread nodes automatically
+            idx = list(G.nodes()).index(node_id)
+            pos["x"] = 100 + (idx % 10) * 150
+            pos["y"] = 100 + (idx // 10) * 150
+        
         # Add node with pharma styling
         net.add_node(
-            node_id,
+            str(node_id),  # Ensure node_id is string
             label=styling["label"],
             color=styling["color"],
             shape=styling["shape"],
@@ -63,31 +88,45 @@ def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
                 "color": styling["font_color"],
                 "align": "center",
                 "bold": styling["bold"]
-            },
-            image=styling.get("image"),
-            brokenImage=None
+            }
         )
+        nodes_added += 1
     
     # === ADD PHARMA-STYLED EDGES ===
+    edges_added = 0
     for u, v, edge_data in G.edges(data=True):
-        edge_styling = get_pharma_edge_styling(u, v, edge_data, highlight_edges, target_batch_id)
+        # Ensure edge_data is a dictionary
+        if not isinstance(edge_data, dict):
+            edge_data = {}
+        
+        edge_styling = get_pharma_edge_styling(str(u), str(v), edge_data, highlight_edges, target_batch_id)
         
         net.add_edge(
-            u, v,
+            str(u),  # Ensure node IDs are strings
+            str(v),
             label=edge_styling["label"],
             color=edge_styling["color"],
             width=edge_styling["width"],
             arrows=edge_styling["arrows"],
             opacity=edge_styling["opacity"],
             dashes=edge_styling["dashes"],
-            smooth=False,
+            smooth=True,
             font=edge_styling["font"],
             length=edge_styling["length"]
         )
+        edges_added += 1
+    
+    st.success(f"✅ Added {nodes_added} nodes and {edges_added} edges to graph")
     
     # === PHARMA PROFESSIONAL CONFIGURATION ===
     config = {
-        "physics": {"enabled": False},
+        "physics": {
+            "enabled": False,
+            "stabilization": {
+                "enabled": True,
+                "iterations": 1000
+            }
+        },
         "interaction": {
             "dragNodes": True,
             "dragView": True,
@@ -99,7 +138,7 @@ def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
             "keyboard": {"enabled": False}
         },
         "edges": {
-            "smooth": {"enabled": False},
+            "smooth": {"enabled": True, "type": "continuous"},
             "arrows": {
                 "to": {
                     "enabled": True,
@@ -121,7 +160,7 @@ def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
             }
         },
         "layout": {
-            "improvedLayout": False,
+            "improvedLayout": True,
             "hierarchical": {
                 "enabled": False
             }
@@ -131,24 +170,35 @@ def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
     net.set_options(json.dumps(config))
     
     # === SAVE AND RENDER ===
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as tmp:
-        net.save_graph(tmp.name)
-        tmp_path = tmp.name
-    
-    with open(tmp_path, 'r', encoding='utf-8') as f:
-        html_content = f.read()
-    
-    # Add pharma professional legend
-    legend_html = generate_pharma_legend(target_batch_id, trace_mode, highlight_nodes)
-    html_content = html_content.replace('</body>', f'{legend_html}</body>')
-    
-    with open(tmp_path, 'w', encoding='utf-8') as f:
-        f.write(html_content)
-    
-    with open(tmp_path, 'r', encoding='utf-8') as f:
-        components.html(f.read(), height=850, scrolling=False)
-    
-    os.unlink(tmp_path)
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as tmp:
+            net.save_graph(tmp.name)
+            tmp_path = tmp.name
+        
+        with open(tmp_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        
+        # Add pharma professional legend
+        legend_html = generate_pharma_legend(target_batch_id, trace_mode, highlight_nodes)
+        html_content = html_content.replace('</body>', f'{legend_html}</body>')
+        
+        with open(tmp_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+        
+        with open(tmp_path, 'r', encoding='utf-8') as f:
+            components.html(f.read(), height=900, scrolling=False)
+        
+        os.unlink(tmp_path)
+        st.success("🎯 Graph rendered successfully!")
+        
+    except Exception as e:
+        st.error(f"❌ Error rendering graph: {str(e)}")
+        # Try to show the graph without legend as fallback
+        try:
+            net.show("graph.html")
+            st.warning("⚠️ Graph saved to graph.html as fallback")
+        except:
+            st.error("Failed to save graph as fallback")
 
 def calculate_trace_highlights(G, target_batch_id, trace_mode):
     """Calculate which nodes/edges to highlight based on trace mode"""
@@ -164,10 +214,13 @@ def calculate_trace_highlights(G, target_batch_id, trace_mode):
                 highlight_nodes.update(descendants)
                 
                 for desc in descendants:
-                    if nx.has_path(G, target_batch_id, desc):
-                        path = nx.shortest_path(G, target_batch_id, desc)
-                        for i in range(len(path) - 1):
-                            highlight_edges.add((path[i], path[i + 1]))
+                    try:
+                        if nx.has_path(G, target_batch_id, desc):
+                            path = nx.shortest_path(G, target_batch_id, desc)
+                            for i in range(len(path) - 1):
+                                highlight_edges.add((path[i], path[i + 1]))
+                    except:
+                        continue
             except nx.NetworkXError:
                 pass
         
@@ -177,10 +230,13 @@ def calculate_trace_highlights(G, target_batch_id, trace_mode):
                 highlight_nodes.update(ancestors)
                 
                 for anc in ancestors:
-                    if nx.has_path(G, anc, target_batch_id):
-                        path = nx.shortest_path(G, anc, target_batch_id)
-                        for i in range(len(path) - 1):
-                            highlight_edges.add((path[i], path[i + 1]))
+                    try:
+                        if nx.has_path(G, anc, target_batch_id):
+                            path = nx.shortest_path(G, anc, target_batch_id)
+                            for i in range(len(path) - 1):
+                                highlight_edges.add((path[i], path[i + 1]))
+                    except:
+                        continue
             except nx.NetworkXError:
                 pass
     
@@ -189,6 +245,9 @@ def calculate_trace_highlights(G, target_batch_id, trace_mode):
 def calculate_pharma_positions(G, target_batch_id=None):
     """Calculate positions for pharma process flow layout"""
     positions = {}
+    
+    if G.number_of_nodes() == 0:
+        return positions
     
     # Group by pharmaceutical process stage
     raw_materials = [n for n in G.nodes() if G.nodes[n].get("type") == "Raw Material"]
@@ -204,27 +263,41 @@ def calculate_pharma_positions(G, target_batch_id=None):
     capsules = [n for n in finished_products if "CAP" in str(n).upper()]
     others = [n for n in finished_products if n not in tablets and n not in capsules]
     
-    # Pharmaceutical Process Flow Columns
+    # Pharmaceutical Process Flow Columns with better positioning
     columns = {
-        "API": {"x": 100, "nodes": apis},
-        "Excipients": {"x": 250, "nodes": excipients},
-        "Blending": {"x": 450, "nodes": blends},
-        "Solutions": {"x": 600, "nodes": solutions},
-        "Tablets": {"x": 800, "nodes": tablets},
-        "Capsules": {"x": 800, "nodes": capsules},
-        "Other Products": {"x": 800, "nodes": others}
+        "API": {"x": 100, "nodes": apis[:20]},  # Limit to 20 nodes per column
+        "Excipients": {"x": 300, "nodes": excipients[:20]},
+        "Blending": {"x": 500, "nodes": blends[:20]},
+        "Solutions": {"x": 700, "nodes": solutions[:20]},
+        "Tablets": {"x": 900, "nodes": tablets[:20]},
+        "Capsules": {"x": 1100, "nodes": capsules[:20]},
+        "Other Products": {"x": 1300, "nodes": others[:20]}
     }
     
-    # Position nodes in their process columns
+    # Position nodes in their process columns with better spacing
     for col_name, col_data in columns.items():
-        y = 150
-        for node in col_data["nodes"][:10]:  # Limit per column
-            positions[node] = {"x": col_data["x"], "y": y}
-            y += 120
+        y_start = 100
+        y_spacing = 120
+        for i, node in enumerate(col_data["nodes"]):
+            positions[node] = {"x": col_data["x"], "y": y_start + i * y_spacing}
+    
+    # Handle remaining nodes that weren't categorized
+    all_categorized = set()
+    for col_data in columns.values():
+        all_categorized.update(col_data["nodes"])
+    
+    remaining_nodes = [n for n in G.nodes() if n not in all_categorized]
+    
+    # Position remaining nodes in a grid
+    grid_x = 100
+    grid_y = 100
+    for i, node in enumerate(remaining_nodes[:100]):  # Limit to 100 remaining nodes
+        positions[node] = {"x": grid_x + (i % 10) * 150, "y": grid_y + (i // 10) * 150}
     
     # Center target node if provided
     if target_batch_id and target_batch_id in positions:
-        positions[target_batch_id]["y"] = 450
+        positions[target_batch_id]["x"] = 700  # Center horizontally
+        positions[target_batch_id]["y"] = 400  # Center vertically
     
     return positions
 
@@ -233,7 +306,7 @@ def get_pharma_node_styling(node_data, node_id, target_batch_id, is_highlighted)
     
     node_type = node_data.get("type", "Unknown")
     material = str(node_data.get("material", "")).upper()
-    is_target = node_id == target_batch_id
+    is_target = str(node_id) == str(target_batch_id)
     
     # Pharma Color Scheme
     pharma_colors = {
@@ -254,6 +327,9 @@ def get_pharma_node_styling(node_data, node_id, target_batch_id, is_highlighted)
             "Capsule": {"color": "#ff4081", "border": "#c51162"},
             "Injection": {"color": "#2962ff", "border": "#0039cb"},
             "default": {"color": "#00bfa5", "border": "#00796b"}
+        },
+        "Unknown": {
+            "default": {"color": "#9e9e9e", "border": "#616161"}
         }
     }
     
@@ -261,21 +337,25 @@ def get_pharma_node_styling(node_data, node_id, target_batch_id, is_highlighted)
     specific_type = "default"
     if "API" in material:
         specific_type = "API"
-    elif any(x in material for x in ["EXCIPIENT", "FILLER", "BINDER"]):
+    elif any(x in material for x in ["EXCIPIENT", "FILLER", "BINDER", "DILUENT"]):
         specific_type = "Excipient"
-    elif any(x in material for x in ["SOLVENT", "WATER"]):
+    elif any(x in material for x in ["SOLVENT", "WATER", "ETHANOL", "ISOPROPYL"]):
         specific_type = "Solvent"
-    elif "BLEND" in material:
+    elif "BLEND" in material or "MIX" in material:
         specific_type = "Blend"
-    elif "SOLUTION" in material:
+    elif "SOLUTION" in material or "LIQUID" in material:
         specific_type = "Solution"
-    elif "TABLET" in material or "TAB" in node_id:
+    elif "GRANULATION" in material:
+        specific_type = "Granulation"
+    elif "TABLET" in material or "TAB" in str(node_id).upper():
         specific_type = "Tablet"
-    elif "CAPSULE" in material or "CAP" in node_id:
+    elif "CAPSULE" in material or "CAP" in str(node_id).upper():
         specific_type = "Capsule"
     
     # Get colors
-    color_info = pharma_colors.get(node_type, {}).get(specific_type, pharma_colors.get(node_type, {}).get("default", {"color": "#607d8b", "border": "#37474f"}))
+    color_info = pharma_colors.get(node_type, {}).get(specific_type, 
+                    pharma_colors.get(node_type, {}).get("default", 
+                    {"color": "#607d8b", "border": "#37474f"}))
     
     # Shapes based on pharmaceutical item
     shape_map = {
@@ -284,7 +364,9 @@ def get_pharma_node_styling(node_data, node_id, target_batch_id, is_highlighted)
         "Finished Product": "star",
         "API": "diamond",
         "Tablet": "hexagon",
-        "Capsule": "ellipse"
+        "Capsule": "ellipse",
+        "Blend": "triangle",
+        "Solution": "dot"
     }
     
     shape = shape_map.get(specific_type, shape_map.get(node_type, "circle"))
@@ -330,39 +412,37 @@ def get_pharma_node_styling(node_data, node_id, target_batch_id, is_highlighted)
 
 def format_pharma_label(batch_id, material):
     """Format pharmaceutical labels professionally"""
+    # Convert to string
+    batch_str = str(batch_id)
+    material_str = str(material) if material else "Unknown"
+    
     # Shorten material name
-    if isinstance(material, str):
-        material_words = material.split()
-        if len(material_words) > 3:
-            material_short = ' '.join(material_words[:3]) + '...'
-        else:
-            material_short = material
+    material_words = material_str.split()
+    if len(material_words) > 2:
+        material_short = ' '.join(material_words[:2]) + '...'
     else:
-        material_short = str(material)
+        material_short = material_str
     
     # Use batch ID abbreviation
-    if isinstance(batch_id, str):
-        if batch_id.startswith("RM-"):
-            prefix = "RM"
-        elif batch_id.startswith("INT-"):
-            prefix = "INT"
-        elif batch_id.startswith("FP-"):
-            prefix = "FP"
-        else:
-            prefix = batch_id.split('-')[0] if '-' in batch_id else batch_id[:4]
+    if batch_str.startswith("RM-"):
+        prefix = "RM"
+    elif batch_str.startswith("INT-"):
+        prefix = "INT"
+    elif batch_str.startswith("FP-"):
+        prefix = "FP"
     else:
-        prefix = str(batch_id)[:4]
+        prefix = batch_str.split('-')[0] if '-' in batch_str else batch_str[:4]
     
     # Get numeric part
-    numbers = re.findall(r'\d+', str(batch_id))
-    number_part = numbers[0] if numbers else ""
+    numbers = re.findall(r'\d+', batch_str)
+    number_part = numbers[0] if numbers else batch_str[-4:]
     
-    return f"{prefix}-{number_part}\n{material_short[:15]}"
+    return f"{prefix}-{number_part}\n{material_short[:12]}"
 
 def get_pharma_edge_styling(u, v, edge_data, highlight_edges, target_batch_id):
     """Get pharmaceutical professional styling for edges"""
-    is_highlighted = (u, v) in highlight_edges
-    is_target_edge = (u == target_batch_id or v == target_batch_id)
+    is_highlighted = (str(u), str(v)) in highlight_edges or (str(u), str(v)) in [tuple(map(str, e)) for e in highlight_edges]
+    is_target_edge = (str(u) == str(target_batch_id) or str(v) == str(target_batch_id))
     relationship = str(edge_data.get("relationship", ""))
     
     # Pharma edge styling
@@ -413,7 +493,7 @@ def get_pharma_edge_styling(u, v, edge_data, highlight_edges, target_batch_id):
             "align": "middle",
             "strokeWidth": 0
         },
-        "length": 150
+        "length": 200
     }
 
 def format_edge_label(edge_data):
@@ -428,7 +508,9 @@ def format_edge_label(edge_data):
         "produces": "Produces",
         "precedes": "Precedes",
         "coated_with": "Coated With",
-        "mixed_with": "Mixed With"
+        "mixed_with": "Mixed With",
+        "transformed_into": "Transforms To",
+        "contains": "Contains"
     }
     
     display_rel = rel_map.get(relationship, relationship.replace("_", " ").title())
@@ -477,8 +559,11 @@ def generate_pharma_tooltip(node_data, node_id):
     else:
         batch_label = str(node_id)
     
+    # Get node color for border
+    node_color = node_data.get('color', '#1e88e5')
+    
     tooltip = f"""
-    <div style="padding: 12px; font-family: 'Arial', sans-serif; max-width: 350px; background: white; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.15); border-left: 4px solid {node_data.get('color', '#1e88e5')};">
+    <div style="padding: 12px; font-family: 'Arial', sans-serif; max-width: 350px; background: white; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.15); border-left: 4px solid {node_color};">
         <div style="font-weight: 700; font-size: 14px; margin-bottom: 8px; color: #1a237e; border-bottom: 2px solid #e8eaf6; padding-bottom: 6px;">
             🏭 {batch_label}
         </div>
@@ -507,14 +592,14 @@ def generate_pharma_tooltip(node_data, node_id):
             """
     
     # Add additional fields if they exist
-    additional_fields = ["lot", "expiry_date", "manufacturer", "location"]
+    additional_fields = ["lot", "expiry_date", "manufacturer", "location", "manufacturing_date", "expiration_date"]
     for field in additional_fields:
         if field in node_data and node_data[field] is not None:
             value = node_data[field]
             if str(value).strip() and str(value).lower() != "nan":
                 tooltip += f"""
                 <tr>
-                    <td style="padding: 4px 0; color: #546e7a; font-weight: 500;">📋 {field.title()}:</td>
+                    <td style="padding: 4px 0; color: #546e7a; font-weight: 500;">📋 {field.title().replace('_', ' ')}:</td>
                     <td style="padding: 4px 0; color: #757575; font-weight: 500; text-align: right;">{value}</td>
                 </tr>
                 """
@@ -524,11 +609,11 @@ def generate_pharma_tooltip(node_data, node_id):
         
         <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #f5f5f5; font-size: 11px; color: #78909c;">
             <div style="display: flex; align-items: center; margin-bottom: 4px;">
-                <span style="margin-right: 6px;">•</span>
+                <span style="margin-right: 6px;">📋</span>
                 <span>GMP Batch Record Reference</span>
             </div>
             <div style="display: flex; align-items: center;">
-                <span style="margin-right: 6px;">•</span>
+                <span style="margin-right: 6px;">🔗</span>
                 <span>Pharmaceutical Traceability</span>
             </div>
         </div>
@@ -547,6 +632,20 @@ def generate_pharma_legend(target_batch_id, trace_mode, highlight_nodes):
     }
     
     highlight_count = len(highlight_nodes) if highlight_nodes else 0
+    
+    target_section = ""
+    if target_batch_id:
+        target_section = f"""
+        <div style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid #1e88e5;">
+            <div style="font-weight: 700; color: #0d47a1; font-size: 13px;">🧬 TARGET BATCH</div>
+            <div style="font-family: monospace; background: white; padding: 6px; border-radius: 4px; margin-top: 6px; border: 1px solid #bbdefb;">
+                <code style="color: #1a3c6e;">{target_batch_id}</code>
+            </div>
+            <div style="font-size: 11px; color: #1565c0; margin-top: 6px;">
+                {trace_descriptions.get(trace_mode, "")} • {highlight_count} batches in trace
+            </div>
+        </div>
+        """
     
     return f"""
     <div style="
@@ -573,7 +672,7 @@ def generate_pharma_legend(target_batch_id, trace_mode, highlight_nodes):
             </div>
         </div>
         
-        {f'<div style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid #1e88e5;"><div style="font-weight: 700; color: #0d47a1; font-size: 13px;">🧬 TARGET BATCH</div><div style="font-family: monospace; background: white; padding: 6px; border-radius: 4px; margin-top: 6px; border: 1px solid #bbdefb;"><code style="color: #1a3c6e;">{target_batch_id}</code></div><div style="font-size: 11px; color: #1565c0; margin-top: 6px;">{trace_descriptions.get(trace_mode, "")} • {highlight_count} batches in trace</div></div>' if target_batch_id else ''}
+        {target_section}
         
         <div style="margin-bottom: 16px;">
             <div style="font-weight: 700; color: #37474f; font-size: 12px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">🧪 BATCH TYPES</div>
@@ -636,15 +735,15 @@ def generate_pharma_legend(target_batch_id, trace_mode, highlight_nodes):
         <div style="padding-top: 12px; border-top: 1px solid #eceff1;">
             <div style="font-size: 11px; color: #5d7fa3; line-height: 1.5;">
                 <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                    <span style="margin-right: 6px; color: #1e88e5;">•</span>
+                    <span style="margin-right: 6px; color: #1e88e5;">👆</span>
                     <span><b>Hover</b> for batch details (GMP records)</span>
                 </div>
                 <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                    <span style="margin-right: 6px; color: #1e88e5;">•</span>
+                    <span style="margin-right: 6px; color: #1e88e5;">🖱️</span>
                     <span><b>Drag</b> to reposition for clarity</span>
                 </div>
                 <div style="display: flex; align-items: center;">
-                    <span style="margin-right: 6px; color: #1e88e5;">•</span>
+                    <span style="margin-right: 6px; color: #1e88e5;">🔍</span>
                     <span><b>Scroll</b> to zoom • For audit trails</span>
                 </div>
             </div>
