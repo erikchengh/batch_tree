@@ -8,622 +8,335 @@ import re
 import streamlit as st
 import math
 from collections import defaultdict
+from typing import Dict, List, Optional, Tuple
 
-def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
+# Professional pharmaceutical color scheme (based on USP/FDA guidelines)
+PHARMA_COLORS = {
+    # Material Classes
+    "API": {"primary": "#1565C0", "secondary": "#1976D2", "light": "#E3F2FD", "icon": "🧬"},
+    "EXCIPIENT": {"primary": "#2E7D32", "secondary": "#43A047", "light": "#E8F5E9", "icon": "📦"},
+    "PROCESS_AID": {"primary": "#6A1B9A", "secondary": "#7B1FA2", "light": "#F3E5F5", "icon": "💧"},
+    "INTERMEDIATE": {"primary": "#E65100", "secondary": "#EF6C00", "light": "#FFF3E0", "icon": "⚗️"},
+    "BULK": {"primary": "#00838F", "secondary": "#00ACC1", "light": "#E0F7FA", "icon": "🏭"},
+    "FINISHED": {"primary": "#C62828", "secondary": "#D32F2F", "light": "#FFEBEE", "icon": "💊"},
+    
+    # Quality Statuses
+    "RELEASED": {"color": "#2E7D32", "icon": "✅"},
+    "QUARANTINE": {"color": "#F57C00", "icon": "⏳"},
+    "PENDING_QC": {"color": "#7B1FA2", "icon": "🔬"},
+    "REJECTED": {"color": "#C62828", "icon": "❌"},
+    "ON_HOLD": {"color": "#FF5722", "icon": "⚠️"},
+    
+    # Process Stages
+    "DISPENSING": {"color": "#5D4037", "icon": "⚖️"},
+    "GRANULATION": {"color": "#F4511E", "icon": "🔄"},
+    "BLENDING": {"color": "#FB8C00", "icon": "🌀"},
+    "COMPRESSION": {"color": "#43A047", "icon": "⬇️"},
+    "COATING": {"color": "#00ACC1", "icon": "🎨"},
+    "ENCAPSULATION": {"color": "#8E24AA", "icon": "💊"},
+    "PACKAGING": {"color": "#3949AB", "icon": "📦"},
+    "RELEASE": {"color": "#00897B", "icon": "✅"}
+}
+
+
+def render_genealogy_graph(G: nx.DiGraph, target_batch_id: Optional[str] = None, trace_mode: str = "none"):
     """
-    Render a professional pharmaceutical batch tree with icons
+    Render professional pharmaceutical batch genealogy visualization
+    Compliant with FDA 21 CFR Part 11 display requirements
     """
     
     if G is None or G.number_of_nodes() == 0:
-        st.warning("⚠️ No graph data available.")
+        st.warning("⚠️ No batch data available for visualization.")
         return
     
-    # Create a proper tree structure
-    tree = create_pharma_tree(G, target_batch_id)
+    # Create subgraph for visualization
+    if target_batch_id and target_batch_id in G.nodes():
+        viz_graph = create_genealogy_subgraph(G, target_batch_id, trace_mode)
+    else:
+        viz_graph = G.copy()
     
-    if tree.number_of_nodes() == 0:
-        st.error("❌ Could not create tree from the data")
+    if viz_graph.number_of_nodes() == 0:
+        st.error("❌ Could not create visualization from the data")
         return
     
-    st.info(f"🌳 Batch Tree: {tree.number_of_nodes()} nodes, {tree.number_of_edges()} edges")
+    # Display graph statistics
+    display_graph_stats(viz_graph, target_batch_id)
     
-    # Create network
+    # Create PyVis network
     net = Network(
-        height="750px",
+        height="800px",
         width="100%",
         directed=True,
-        bgcolor="#f8fafc",
-        font_color="#1e293b",
+        bgcolor="#FAFBFC",
+        font_color="#1E293B",
         notebook=False
     )
     
-    # Calculate hierarchical positions
-    positions = calculate_tree_layout(tree, target_batch_id)
+    # Calculate hierarchical layout
+    positions = calculate_hierarchical_layout(viz_graph, target_batch_id)
     
-    # Add nodes with professional styling
-    for node_id, node_data in tree.nodes(data=True):
-        styling = get_pharma_tree_node_styling(node_data, node_id, target_batch_id)
+    # Add nodes with professional pharmaceutical styling
+    for node_id, node_data in viz_graph.nodes(data=True):
+        styling = get_pharma_node_styling(node_data, node_id, target_batch_id, trace_mode)
         pos = positions.get(node_id, {"x": 0, "y": 0})
         
         net.add_node(
             str(node_id),
             label=styling["label"],
             title=styling["tooltip"],
-            color=styling["color"],
+            color={
+                "background": styling["background"],
+                "border": styling["border"],
+                "highlight": {"background": styling["highlight_bg"], "border": styling["highlight_border"]}
+            },
             shape=styling["shape"],
             size=styling["size"],
             borderWidth=styling["border_width"],
-            borderColor=styling["border_color"],
             x=pos["x"],
             y=pos["y"],
             fixed=True,
             physics=False,
             font={
                 "size": styling["font_size"],
-                "face": "Segoe UI, Arial, sans-serif",
+                "face": "'Inter', 'Segoe UI', system-ui, sans-serif",
                 "color": styling["font_color"],
                 "align": "center",
-                "bold": styling["bold"]
+                "bold": styling["bold"],
+                "multi": True
             },
-            shadow=True
+            shadow={
+                "enabled": True,
+                "color": "rgba(0,0,0,0.12)",
+                "size": 8,
+                "x": 2,
+                "y": 4
+            }
         )
     
     # Add edges with professional styling
-    for u, v, edge_data in tree.edges(data=True):
-        styling = get_pharma_tree_edge_styling(u, v, edge_data, target_batch_id)
+    for u, v, edge_data in viz_graph.edges(data=True):
+        styling = get_pharma_edge_styling(u, v, edge_data, target_batch_id, viz_graph)
         
         net.add_edge(
             str(u),
             str(v),
-            color=styling["color"],
+            color={"color": styling["color"], "opacity": styling["opacity"]},
             width=styling["width"],
-            arrows={"to": {"enabled": True, "scaleFactor": 1.2}},
-            smooth={"type": "cubicBezier", "roundness": 0.4},
+            arrows={"to": {"enabled": True, "scaleFactor": 1.0, "type": "arrow"}},
+            smooth={"type": "cubicBezier", "roundness": 0.3},
             dashes=styling["dashes"],
-            font=styling["font"],
+            title=styling["title"],
             label=styling.get("label", ""),
+            font={"size": 10, "color": "#64748B", "align": "horizontal"},
             length=styling["length"]
         )
     
-    # Configure tree layout
-    config = {
-        "physics": {"enabled": False},
-        "interaction": {
-            "dragNodes": True,
-            "dragView": True,
-            "zoomView": True,
-            "hover": True,
-            "tooltipDelay": 200,
-            "navigationButtons": True
-        },
-        "edges": {
-            "smooth": {"enabled": True, "type": "cubicBezier", "roundness": 0.3},
-            "color": {"inherit": False},
-            "arrows": {"to": {"enabled": True, "scaleFactor": 1.2}},
-            "shadow": {"enabled": True, "color": "rgba(0,0,0,0.1)", "size": 3}
-        },
-        "nodes": {
-            "shape": "dot",
-            "font": {"align": "center"},
-            "shadow": {"enabled": True, "color": "rgba(0,0,0,0.15)", "size": 5},
-            "borderWidth": 2,
-            "scaling": {"min": 20, "max": 60}
-        },
-        "layout": {
-            "improvedLayout": True,
-            "hierarchical": {
-                "enabled": False
-            }
-        }
-    }
-    
+    # Configure visualization options
+    config = create_network_config()
     net.set_options(json.dumps(config))
     
-    # Save and render
-    try:
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as tmp:
-            net.save_graph(tmp.name)
-            tmp_path = tmp.name
-        
-        with open(tmp_path, 'r', encoding='utf-8') as f:
-            html_content = f.read()
-        
-        # Add custom CSS for pharmaceutical theme
-        css = """
-        <style>
-        .vis-network {
-            border: 2px solid #e2e8f0 !important;
-            border-radius: 12px !important;
-            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%) !important;
-        }
-        .vis-tooltip {
-            background: white !important;
-            border: 2px solid #cbd5e1 !important;
-            border-radius: 8px !important;
-            padding: 12px !important;
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif !important;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1) !important;
-            max-width: 320px !important;
-        }
-        .vis-tooltip h3 {
-            color: #1e3a8a !important;
-            margin-top: 0 !important;
-            border-bottom: 2px solid #e2e8f0 !important;
-            padding-bottom: 8px !important;
-        }
-        </style>
-        """
-        
-        legend = generate_pharma_tree_legend(target_batch_id, tree)
-        
-        html_content = html_content.replace('</head>', f'{css}</head>')
-        html_content = html_content.replace('</body>', f'{legend}</body>')
-        
-        with open(tmp_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
-        
-        with open(tmp_path, 'r', encoding='utf-8') as f:
-            components.html(f.read(), height=800, scrolling=False)
-        
-        os.unlink(tmp_path)
-        
-    except Exception as e:
-        st.error(f"❌ Error: {str(e)}")
+    # Render the network
+    render_network(net, target_batch_id, viz_graph)
 
-def create_pharma_tree(G, target_batch_id=None):
-    """Create a pharmaceutical batch tree"""
-    tree = nx.DiGraph()
-    
-    if target_batch_id is None or target_batch_id not in G:
-        # Get first finished product
-        finished_products = [n for n in G.nodes() if G.nodes[n].get("type") == "Finished Product"]
-        if finished_products:
-            target_batch_id = finished_products[0]
-        else:
-            return tree
-    
-    target_data = G.nodes[target_batch_id]
-    target_type = target_data.get("type", "Unknown")
-    
-    # Add target as root
-    tree.add_node(target_batch_id, **target_data)
-    
-    if target_type == "Finished Product":
-        # Find all raw materials that go into this product
-        raw_materials = find_direct_raw_materials(G, target_batch_id)
-        
-        for rm in raw_materials:
-            tree.add_node(rm, **G.nodes[rm])
-            tree.add_edge(rm, target_batch_id, 
-                         relationship="used_in",
-                         quantity=G[rm][target_batch_id].get("quantity", "") if G.has_edge(rm, target_batch_id) else "",
-                         unit=G[rm][target_batch_id].get("unit", "") if G.has_edge(rm, target_batch_id) else "")
-    
-    elif target_type == "Raw Material":
-        # Find all finished products that use this material
-        finished_products = find_direct_finished_products(G, target_batch_id)
-        
-        for fp in finished_products:
-            tree.add_node(fp, **G.nodes[fp])
-            tree.add_edge(target_batch_id, fp,
-                         relationship="used_in",
-                         quantity=G[target_batch_id][fp].get("quantity", "") if G.has_edge(target_batch_id, fp) else "",
-                         unit=G[target_batch_id][fp].get("unit", "") if G.has_edge(target_batch_id, fp) else "")
-    
-    return tree
 
-def find_direct_raw_materials(G, node):
-    """Find direct raw material predecessors"""
-    raw_materials = []
-    visited = set()
+def create_genealogy_subgraph(G: nx.DiGraph, target_batch_id: str, trace_mode: str) -> nx.DiGraph:
+    """Create a subgraph focused on the target batch"""
+    subgraph = nx.DiGraph()
     
-    to_visit = [node]
+    # Always include target
+    if target_batch_id in G.nodes():
+        subgraph.add_node(target_batch_id, **G.nodes[target_batch_id])
     
-    while to_visit:
-        current = to_visit.pop(0)
-        if current in visited:
-            continue
-        visited.add(current)
-        
-        for predecessor in G.predecessors(current):
-            if predecessor in visited:
-                continue
-            
-            pred_type = G.nodes[predecessor].get("type")
-            if pred_type == "Raw Material":
-                raw_materials.append(predecessor)
-            elif pred_type == "Intermediate":
-                # Skip intermediate, continue exploring
-                to_visit.append(predecessor)
+    # Get ancestors (backward trace)
+    ancestors = nx.ancestors(G, target_batch_id)
+    for ancestor in ancestors:
+        subgraph.add_node(ancestor, **G.nodes[ancestor])
     
-    return list(set(raw_materials))
+    # Get descendants (forward trace) if target is not a finished product
+    node_type = G.nodes[target_batch_id].get("type", "")
+    if node_type != "Finished Product":
+        descendants = nx.descendants(G, target_batch_id)
+        for descendant in descendants:
+            subgraph.add_node(descendant, **G.nodes[descendant])
+    
+    # Add edges
+    all_nodes = set(subgraph.nodes())
+    for u, v, data in G.edges(data=True):
+        if u in all_nodes and v in all_nodes:
+            subgraph.add_edge(u, v, **data)
+    
+    return subgraph
 
-def find_direct_finished_products(G, node):
-    """Find direct finished product successors"""
-    finished_products = []
-    visited = set()
-    
-    to_visit = [node]
-    
-    while to_visit:
-        current = to_visit.pop(0)
-        if current in visited:
-            continue
-        visited.add(current)
-        
-        for successor in G.successors(current):
-            if successor in visited:
-                continue
-            
-            succ_type = G.nodes[successor].get("type")
-            if succ_type == "Finished Product":
-                finished_products.append(successor)
-            elif succ_type == "Intermediate":
-                # Skip intermediate, continue exploring
-                to_visit.append(successor)
-    
-    return list(set(finished_products))
 
-def calculate_tree_layout(tree, target_batch_id):
-    """Calculate positions for a beautiful tree layout"""
+def calculate_hierarchical_layout(G: nx.DiGraph, target_batch_id: Optional[str] = None) -> Dict:
+    """Calculate hierarchical positions for batch genealogy"""
     positions = {}
     
-    if tree.number_of_nodes() == 0:
+    if G.number_of_nodes() == 0:
         return positions
     
-    # Get node lists
-    finished_products = [n for n in tree.nodes() if tree.nodes[n].get("type") == "Finished Product"]
-    raw_materials = [n for n in tree.nodes() if tree.nodes[n].get("type") == "Raw Material"]
+    # Group nodes by type/stage
+    layers = {
+        "Raw Material": [],
+        "Intermediate": [],
+        "Finished Product": []
+    }
     
-    # Center positions
-    center_x, center_y = 500, 300
+    for node in G.nodes():
+        node_type = G.nodes[node].get("type", "Unknown")
+        if node_type in layers:
+            layers[node_type].append(node)
+        else:
+            # Check process stage for intermediates
+            process_stage = G.nodes[node].get("process_stage", "")
+            if process_stage:
+                layers["Intermediate"].append(node)
+            else:
+                layers["Raw Material"].append(node)
     
-    # Position target at center top
-    if target_batch_id and target_batch_id in tree.nodes():
-        positions[target_batch_id] = {"x": center_x, "y": 100}
+    # Sort intermediates by process stage order
+    stage_order = {"GRANULATION": 1, "BLENDING": 2, "COMPRESSION": 3, "COATING": 4, "ENCAPSULATION": 4, "PACKAGING": 5}
+    layers["Intermediate"].sort(key=lambda x: stage_order.get(G.nodes[x].get("process_stage", ""), 99))
     
-    # Position finished products
-    fp_count = len(finished_products)
-    fp_spacing = min(800 / max(1, fp_count), 200)
-    start_x = center_x - (fp_count - 1) * fp_spacing / 2
+    # Calculate positions
+    canvas_width = 1200
+    canvas_height = 800
     
-    for i, fp in enumerate(finished_products):
-        if fp == target_batch_id:
+    y_positions = {
+        "Raw Material": 50,
+        "Intermediate": 300,
+        "Finished Product": 550
+    }
+    
+    for layer_name, nodes in layers.items():
+        if not nodes:
             continue
-        positions[fp] = {"x": start_x + i * fp_spacing, "y": 100}
+        
+        y = y_positions.get(layer_name, 300)
+        n = len(nodes)
+        
+        if n == 1:
+            positions[nodes[0]] = {"x": canvas_width // 2, "y": y}
+        else:
+            spacing = min(canvas_width // (n + 1), 200)
+            start_x = (canvas_width - (n - 1) * spacing) // 2
+            
+            for i, node in enumerate(nodes):
+                positions[node] = {"x": start_x + i * spacing, "y": y}
     
-    # Position raw materials in a circular layout around target
-    rm_count = len(raw_materials)
-    radius = 300
-    angle_step = 360 / max(1, rm_count)
-    
-    for i, rm in enumerate(raw_materials):
-        angle = math.radians(i * angle_step)
-        x = center_x + radius * math.cos(angle)
-        y = center_y + radius * math.sin(angle)
-        positions[rm] = {"x": x, "y": y}
+    # Adjust for intermediate sub-layers
+    intermediate_nodes = layers["Intermediate"]
+    if intermediate_nodes:
+        stages = defaultdict(list)
+        for node in intermediate_nodes:
+            stage = G.nodes[node].get("process_stage", "OTHER")
+            stages[stage].append(node)
+        
+        stage_y_offset = 0
+        for stage, nodes in sorted(stages.items(), key=lambda x: stage_order.get(x[0], 99)):
+            for node in nodes:
+                if node in positions:
+                    positions[node]["y"] += stage_y_offset
+            stage_y_offset += 80
     
     return positions
 
-def get_pharma_tree_node_styling(node_data, node_id, target_batch_id):
-    """Get professional pharmaceutical node styling with icons"""
+
+def get_pharma_node_styling(node_data: Dict, node_id: str, target_batch_id: Optional[str], trace_mode: str) -> Dict:
+    """Get professional pharmaceutical node styling"""
     
     node_type = node_data.get("type", "Unknown")
-    material = str(node_data.get("material", "")).upper()
+    material_class = node_data.get("material_class", "")
+    status = node_data.get("status", "QUARANTINE")
+    process_stage = node_data.get("process_stage", "")
     is_target = str(node_id) == str(target_batch_id)
     
-    # Determine material category
-    if "API" in material:
-        category = "API"
-        icon = "🧪"  # Test tube for API
-        color = "#1e88e5"
-        border = "#0d47a1"
-        shape = "diamond"
-    elif any(x in material for x in ["EXCIPIENT", "FILLER", "BINDER", "DILUENT"]):
-        category = "Excipient"
-        icon = "📦"  # Package for excipient
-        color = "#43a047"
-        border = "#1b5e20"
-        shape = "triangle"
-    elif any(x in material for x in ["SOLVENT", "WATER", "ETHANOL"]):
-        category = "Solvent"
-        icon = "💧"  # Droplet for solvent
-        color = "#5e35b1"
-        border = "#311b92"
-        shape = "ellipse"
-    elif node_type == "Finished Product":
-        if "TABLET" in material or "TAB" in node_id:
-            category = "Tablet"
-            icon = "💊"  # Pill for tablet
-            color = "#00c853"
-            border = "#1b5e20"
-            shape = "star"
-        elif "CAPSULE" in material or "CAP" in node_id:
-            category = "Capsule"
-            icon = "💊"  # Pill for capsule
-            color = "#ff4081"
-            border = "#c51162"
-            shape = "hexagon"
-        else:
-            category = "Product"
-            icon = "🏭"  # Factory for other products
-            color = "#00bfa5"
-            border = "#00796b"
-            shape = "star"
+    # Get color scheme based on material class
+    if material_class in PHARMA_COLORS:
+        colors = PHARMA_COLORS[material_class]
+        primary = colors["primary"]
+        secondary = colors["secondary"]
+        light = colors["light"]
+        icon = colors["icon"]
     else:
-        category = "Unknown"
-        icon = "📄"
-        color = "#9e9e9e"
-        border = "#616161"
-        shape = "circle"
+        # Default colors based on node type
+        if node_type == "Raw Material":
+            primary, secondary, light = "#1565C0", "#1976D2", "#E3F2FD"
+            icon = "📦"
+        elif node_type == "Intermediate":
+            primary, secondary, light = "#E65100", "#EF6C00", "#FFF3E0"
+            icon = "⚗️"
+        elif node_type == "Finished Product":
+            primary, secondary, light = "#C62828", "#D32F2F", "#FFEBEE"
+            icon = "💊"
+        else:
+            primary, secondary, light = "#607D8B", "#78909C", "#ECEFF1"
+            icon = "📋"
+    
+    # Override icon based on specific material type
+    material_name = str(node_data.get("material_name", "")).upper()
+    if "API" in material_class or "API" in material_name:
+        icon = "🧬"
+    elif "WATER" in material_name or "SOLVENT" in material_name:
+        icon = "💧"
+    elif "TABLET" in material_name:
+        icon = "💊"
+    elif "CAPSULE" in material_name:
+        icon = "💊"
+    elif "COATING" in material_name or "OPADRY" in material_name:
+        icon = "🎨"
+    elif "BLEND" in material_name or "GRANUL" in material_name:
+        icon = "🔄"
+    
+    # Determine shape based on node type
+    if node_type == "Finished Product":
+        shape = "star"
+    elif node_type == "Intermediate":
+        shape = "hexagon"
+    elif material_class == "API":
+        shape = "diamond"
+    else:
+        shape = "dot"
     
     # Size and styling based on importance
     if is_target:
-        size = 60
+        size = 55
         border_width = 4
-        font_size = 16
+        font_size = 14
         bold = True
-        shadow = True
+        background = primary
+        border = "#FFB300"  # Gold border for target
+        highlight_bg = secondary
+        highlight_border = "#FFC107"
     elif node_type == "Finished Product":
         size = 50
         border_width = 3
-        font_size = 14
+        font_size = 13
         bold = True
-        shadow = True
-    else:  # Raw materials
-        size = 40
+        background = primary
+        border = secondary
+        highlight_bg = secondary
+        highlight_border = primary
+    elif node_type == "Intermediate":
+        size = 42
         border_width = 2
         font_size = 12
         bold = False
-        shadow = True
+        background = primary
+        border = secondary
+        highlight_bg = secondary
+        highlight_border = primary
+    else:  # Raw materials
+        size = 38
+        border_width = 2
+        font_size = 11
+        bold = False
+        background = primary
+        border = secondary
+        highlight_bg = secondary
+        highlight_border = primary
     
-    # Create label with icon
-    label = format_node_label(node_id, node_data.get("material", ""), icon)
+    # Create label
+    label = format_pharma_node_label(node_id, node_data, icon)
     
-    # Create tooltip
-    tooltip = create_pharma_tooltip(node_data, node_id, icon)
-    
-    return {
-        "label": label,
-        "color": color,
-        "border_color": border,
-        "shape": shape,
-        "size": size,
-        "border_width": border_width,
-        "font_size": font_size,
-        "font_color": "#1e293b",
-        "bold": bold,
-        "shadow": shadow,
-        "tooltip": tooltip
-    }
-
-def format_node_label(batch_id, material, icon):
-    """Format node label with icon"""
-    batch_str = str(batch_id)
-    material_str = str(material)
-    
-    # Get batch number
-    numbers = re.findall(r'\d+', batch_str)
-    batch_num = numbers[0] if numbers else ""
-    
-    # Shorten material name
-    if len(material_str) > 12:
-        material_short = material_str[:12] + "..."
-    else:
-        material_short = material_str
-    
-    # Determine type prefix
-    if batch_str.startswith("RM-"):
-        prefix = "RM"
-    elif batch_str.startswith("FP-"):
-        prefix = "FP"
-    else:
-        prefix = batch_str.split('-')[0] if '-' in batch_str else ""
-    
-    return f"{icon}\n{prefix}{'-' + batch_num if batch_num else ''}\n{material_short}"
-
-def create_pharma_tooltip(node_data, node_id, icon):
-    """Create professional pharmaceutical tooltip"""
-    
-    html = f"""
-    <div style="font-family: 'Segoe UI', system-ui, sans-serif; max-width: 300px; background: white; padding: 15px; border-radius: 10px; border-left: 4px solid {node_data.get('color', '#1e88e5')}; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
-        <div style="display: flex; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 2px solid #e2e8f0;">
-            <span style="font-size: 24px; margin-right: 10px;">{icon}</span>
-            <div>
-                <div style="font-weight: 700; color: #1e3a8a; font-size: 14px;">{node_id}</div>
-                <div style="color: #475569; font-size: 12px; margin-top: 2px;">{node_data.get('material', 'Unknown')}</div>
-            </div>
-        </div>
-        
-        <table style="width: 100%; font-size: 12px; border-collapse: collapse; color: #334155;">
-    """
-    
-    # Add key information
-    fields = [
-        ("📋", "Type", node_data.get("type", "")),
-        ("⚖️", "Quantity", f"{node_data.get('quantity', '')} {node_data.get('unit', '')}"),
-        ("🏷️", "Status", node_data.get("status", "")),
-        ("✅", "Quality", node_data.get("quality", "")),
-        ("📅", "Manufactured", node_data.get("manufacturing_date", ""))
-    ]
-    
-    for field_icon, label, value in fields:
-        if value and str(value).strip() and str(value).lower() != "nan":
-            html += f"""
-            <tr style="border-bottom: 1px solid #f1f5f9;">
-                <td style="padding: 6px 0; width: 40%; color: #64748b; font-weight: 500;">
-                    {field_icon} {label}:
-                </td>
-                <td style="padding: 6px 0; text-align: right; color: #1e293b; font-weight: 600;">
-                    {value}
-                </td>
-            </tr>
-            """
-    
-    html += """
-        </table>
-        
-        <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8;">
-            <div style="display: flex; align-items: center; margin-bottom: 4px;">
-                <span style="margin-right: 6px;">📋</span>
-                <span>Pharmaceutical Batch Record</span>
-            </div>
-            <div style="display: flex; align-items: center;">
-                <span style="margin-right: 6px;">🔗</span>
-                <span>GMP Compliant • Traceability</span>
-            </div>
-        </div>
-    </div>
-    """
-    
-    return html
-
-def get_pharma_tree_edge_styling(u, v, edge_data, target_batch_id):
-    """Get professional edge styling for tree"""
-    
-    is_target_related = (str(u) == str(target_batch_id) or str(v) == str(target_batch_id))
-    
-    if is_target_related:
-        color = "#ff9800"  # Orange for target connections
-        width = 3
-        dashes = False
-        length = 200
-    else:
-        color = "#81c784"  # Green for other connections
-        width = 2
-        dashes = [5, 5]
-        length = 180
-    
-    # Add label if quantity exists
-    label = ""
-    if edge_data.get("quantity"):
-        qty = edge_data.get("quantity", "")
-        unit = edge_data.get("unit", "")
-        if qty and unit:
-            label = f"{qty} {unit}"
-    
-    return {
-        "color": color,
-        "width": width,
-        "dashes": dashes,
-        "length": length,
-        "font": {
-            "size": 10,
-            "color": "#555",
-            "align": "middle"
-        },
-        "label": label
-    }
-
-def generate_pharma_tree_legend(target_batch_id, tree):
-    """Generate professional pharmaceutical tree legend"""
-    
-    if not target_batch_id or target_batch_id not in tree.nodes():
-        return ""
-    
-    target_data = tree.nodes[target_batch_id]
-    raw_materials = [n for n in tree.nodes() if tree.nodes[n].get("type") == "Raw Material"]
-    
-    return f"""
-    <div style="
-        position: absolute;
-        top: 20px;
-        left: 20px;
-        padding: 20px;
-        font-family: 'Segoe UI', system-ui, sans-serif;
-        font-size: 13px;
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        border-radius: 12px;
-        border: 1px solid rgba(226, 232, 240, 0.8);
-        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-        z-index: 1000;
-        max-width: 300px;
-    ">
-        <div style="display: flex; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #3b82f6;">
-            <span style="font-size: 28px; margin-right: 12px; color: #3b82f6;">🌳</span>
-            <div>
-                <div style="font-weight: 800; font-size: 16px; color: #1e293b; letter-spacing: 0.3px;">PHARMA BATCH TREE</div>
-                <div style="font-size: 11px; color: #64748b; margin-top: 3px;">Material Genealogy • GMP Traceability</div>
-            </div>
-        </div>
-        
-        <div style="margin-bottom: 20px;">
-            <div style="font-weight: 700; color: #334155; font-size: 12px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
-                🎯 TARGET BATCH
-            </div>
-            <div style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); padding: 14px; border-radius: 8px; border-left: 4px solid #3b82f6;">
-                <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                    <span style="font-size: 20px; margin-right: 10px;">💊</span>
-                    <div>
-                        <div style="font-weight: 700; color: #1e40af; font-size: 13px;">{target_batch_id}</div>
-                        <div style="font-size: 11px; color: #3b82f6; margin-top: 2px;">{target_data.get('material', '')}</div>
-                    </div>
-                </div>
-                <div style="font-size: 11px; color: #475569; margin-top: 6px;">
-                    {len(raw_materials)} raw materials • {tree.number_of_edges()} connections
-                </div>
-            </div>
-        </div>
-        
-        <div style="margin-bottom: 20px;">
-            <div style="font-weight: 700; color: #334155; font-size: 12px; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
-                🏷️ NODE LEGEND
-            </div>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <div style="background: rgba(30, 136, 229, 0.08); padding: 10px; border-radius: 6px; border: 1px solid rgba(30, 136, 229, 0.2);">
-                    <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                        <span style="font-size: 18px; margin-right: 8px;">🧪</span>
-                        <span style="font-weight: 600; font-size: 11px; color: #1e88e5;">API Material</span>
-                    </div>
-                    <div style="font-size: 10px; color: #5d7fa3;">Active Ingredients</div>
-                </div>
-                
-                <div style="background: rgba(67, 160, 71, 0.08); padding: 10px; border-radius: 6px; border: 1px solid rgba(67, 160, 71, 0.2);">
-                    <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                        <span style="font-size: 18px; margin-right: 8px;">📦</span>
-                        <span style="font-weight: 600; font-size: 11px; color: #43a047;">Excipients</span>
-                    </div>
-                    <div style="font-size: 10px; color: #5d7fa3;">Inactive Ingredients</div>
-                </div>
-                
-                <div style="background: rgba(0, 200, 83, 0.08); padding: 10px; border-radius: 6px; border: 1px solid rgba(0, 200, 83, 0.2);">
-                    <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                        <span style="font-size: 18px; margin-right: 8px;">💊</span>
-                        <span style="font-weight: 600; font-size: 11px; color: #00c853;">Finished Product</span>
-                    </div>
-                    <div style="font-size: 10px; color: #5d7fa3;">Final Dosage Form</div>
-                </div>
-                
-                <div style="background: rgba(255, 152, 0, 0.08); padding: 10px; border-radius: 6px; border: 1px solid rgba(255, 152, 0, 0.2);">
-                    <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                        <div style="width: 20px; height: 3px; background: #ff9800; margin-right: 8px;"></div>
-                        <span style="font-weight: 600; font-size: 11px; color: #ff9800;">Active Flow</span>
-                    </div>
-                    <div style="font-size: 10px; color: #5d7fa3;">Material Connection</div>
-                </div>
-            </div>
-        </div>
-        
-        <div style="padding-top: 15px; border-top: 1px solid #e2e8f0;">
-            <div style="font-size: 11px; color: #64748b; line-height: 1.6;">
-                <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                    <span style="margin-right: 8px; color: #3b82f6; font-size: 14px;">👆</span>
-                    <span><strong>Hover</strong> over nodes for batch details</span>
-                </div>
-                <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                    <span style="margin-right: 8px; color: #3b82f6; font-size: 14px;">🖱️</span>
-                    <span><strong>Drag</strong> to reposition tree layout</span>
-                </div>
-                <div style="display: flex; align-items: center;">
-                    <span style="margin-right: 8px; color: #3b82f6; font-size: 14px;">🔍</span>
-                    <span><strong>Scroll</strong> to zoom in/out</span>
-                </div>
-            </div>
-            <div style="margin-top: 12px; font-size: 10px; color: #94a3b8; text-align: center; font-style: italic;">
-                Pharmaceutical Material Flow Tree
-            </div>
-        </div>
-    </div>
-    """
+    # Create 
