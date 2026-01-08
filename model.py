@@ -1,145 +1,601 @@
 import pandas as pd
 import networkx as nx
 from datetime import datetime, timedelta
+from typing import Dict, List, Tuple, Optional
+import random
 
-def create_sample_data():
-    """Create professional pharmaceutical batch data"""
+# GMP-compliant batch numbering format: SITE-PRODUCT-YEAR-SEQUENCE
+SITE_CODE = "MFG01"
+CURRENT_YEAR = "2024"
+
+class PharmaBatchData:
+    """Professional pharmaceutical batch data generator with GMP compliance"""
     
+    # Quality statuses per ICH Q10
+    QUALITY_STATUSES = {
+        "QUARANTINE": {"code": "QN", "color": "#ffa726", "icon": "⏳"},
+        "IN_PROCESS": {"code": "IP", "color": "#29b6f6", "icon": "🔄"},
+        "PENDING_QC": {"code": "PQ", "color": "#ab47bc", "icon": "🔬"},
+        "RELEASED": {"code": "RL", "color": "#66bb6a", "icon": "✅"},
+        "REJECTED": {"code": "RJ", "color": "#ef5350", "icon": "❌"},
+        "ON_HOLD": {"code": "OH", "color": "#ff7043", "icon": "⚠️"},
+        "EXPIRED": {"code": "EX", "color": "#78909c", "icon": "📅"}
+    }
+    
+    # Material classifications per USP/NF
+    MATERIAL_CLASSES = {
+        "API": {"description": "Active Pharmaceutical Ingredient", "criticality": "Critical", "icon": "🧬"},
+        "EXCIPIENT": {"description": "Inactive Ingredient", "criticality": "Major", "icon": "📦"},
+        "PACKAGING": {"description": "Primary/Secondary Packaging", "criticality": "Minor", "icon": "📋"},
+        "PROCESS_AID": {"description": "Processing Aid", "criticality": "Minor", "icon": "⚗️"},
+        "INTERMEDIATE": {"description": "In-Process Material", "criticality": "Major", "icon": "🔄"},
+        "BULK": {"description": "Bulk Product", "criticality": "Critical", "icon": "🏭"},
+        "FINISHED": {"description": "Finished Drug Product", "criticality": "Critical", "icon": "💊"}
+    }
+    
+    # Process stages per FDA guidance
+    PROCESS_STAGES = [
+        {"stage": "DISPENSING", "code": "DIS", "order": 1, "description": "Material Dispensing & Verification"},
+        {"stage": "GRANULATION", "code": "GRN", "order": 2, "description": "Wet/Dry Granulation Process"},
+        {"stage": "BLENDING", "code": "BLD", "order": 3, "description": "Powder Blending & Mixing"},
+        {"stage": "COMPRESSION", "code": "CMP", "order": 4, "description": "Tablet Compression"},
+        {"stage": "COATING", "code": "COT", "order": 5, "description": "Film/Enteric Coating"},
+        {"stage": "ENCAPSULATION", "code": "ENC", "order": 5, "description": "Capsule Filling"},
+        {"stage": "PACKAGING", "code": "PKG", "order": 6, "description": "Primary & Secondary Packaging"},
+        {"stage": "RELEASE", "code": "REL", "order": 7, "description": "QC Release Testing"}
+    ]
+
+def create_pharma_sample_data() -> Dict:
+    """
+    Create comprehensive pharmaceutical batch data with full traceability
+    Compliant with: 21 CFR Part 211, EU GMP Annex 11, ICH Q7/Q10
+    """
+    
+    # ========== RAW MATERIALS (per USP/NF specifications) ==========
     raw_materials = [
-        {"batch_id": "RM-API-001", "type": "Raw Material", "material": "Paracetamol API", "quantity": 100, "unit": "kg", 
-         "status": "Approved", "quality": "A", "lot": "LOT-API-2024-001", "manufacturer": "API Corp"},
-        {"batch_id": "RM-EXC-001", "type": "Raw Material", "material": "Microcrystalline Cellulose", "quantity": 200, "unit": "kg", 
-         "status": "Approved", "quality": "A", "lot": "LOT-EXC-2024-001", "manufacturer": "Excipient Co"},
-        {"batch_id": "RM-EXC-002", "type": "Raw Material", "material": "Croscarmellose Sodium", "quantity": 50, "unit": "kg", 
-         "status": "Approved", "quality": "A", "lot": "LOT-EXC-2024-002", "manufacturer": "Excipient Co"},
-        {"batch_id": "RM-EXC-003", "type": "Raw Material", "material": "Magnesium Stearate", "quantity": 10, "unit": "kg", 
-         "status": "Approved", "quality": "A", "lot": "LOT-EXC-2024-003", "manufacturer": "Excipient Co"},
-        {"batch_id": "RM-SOL-001", "type": "Raw Material", "material": "Purified Water", "quantity": 500, "unit": "L", 
-         "status": "Approved", "quality": "A", "lot": "LOT-SOL-2024-001", "manufacturer": "Water Co"},
-        {"batch_id": "RM-API-002", "type": "Raw Material", "material": "Amoxicillin API", "quantity": 80, "unit": "kg", 
-         "status": "Approved", "quality": "A", "lot": "LOT-API-2024-002", "manufacturer": "API Corp"},
+        # APIs - Active Pharmaceutical Ingredients
+        {
+            "batch_id": f"{SITE_CODE}-API-{CURRENT_YEAR}-0001",
+            "material_code": "API-PARA-001",
+            "material_name": "Paracetamol (Acetaminophen) USP",
+            "type": "Raw Material",
+            "material_class": "API",
+            "cas_number": "103-90-2",
+            "grade": "USP/NF",
+            "quantity": 250.0,
+            "unit": "kg",
+            "potency": 99.8,
+            "potency_unit": "%",
+            "manufacturer": "Granules India Ltd.",
+            "manufacturer_lot": "GIL-PARA-2024-0892",
+            "coa_number": "COA-2024-00156",
+            "supplier": "McKesson Pharmaceutical",
+            "supplier_code": "SUP-001",
+            "received_date": "2024-01-15",
+            "manufacturing_date": "2024-01-02",
+            "retest_date": "2026-01-02",
+            "expiry_date": "2027-01-02",
+            "storage_condition": "15-25°C, Protected from light",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "sampling_plan": "ANSI/ASQ Z1.4 Level II",
+            "tests_performed": ["Identification (IR)", "Assay (HPLC)", "Related Substances", "Residual Solvents", "Heavy Metals", "Microbial Limits"],
+            "gmp_compliance": True,
+            "validated_supplier": True,
+            "dmc_class": "Class II",
+            "pharmacopeia": "USP-NF",
+            "container_type": "HDPE Drum",
+            "container_count": 5,
+            "net_weight_per_container": 50.0
+        },
+        {
+            "batch_id": f"{SITE_CODE}-API-{CURRENT_YEAR}-0002",
+            "material_code": "API-AMOX-001",
+            "material_name": "Amoxicillin Trihydrate USP",
+            "type": "Raw Material",
+            "material_class": "API",
+            "cas_number": "61336-70-7",
+            "grade": "USP/NF",
+            "quantity": 150.0,
+            "unit": "kg",
+            "potency": 98.5,
+            "potency_unit": "%",
+            "manufacturer": "Sandoz International GmbH",
+            "manufacturer_lot": "SDZ-AMX-2024-1456",
+            "coa_number": "COA-2024-00178",
+            "supplier": "Cardinal Health",
+            "supplier_code": "SUP-002",
+            "received_date": "2024-01-18",
+            "manufacturing_date": "2023-12-15",
+            "retest_date": "2025-12-15",
+            "expiry_date": "2026-12-15",
+            "storage_condition": "2-8°C, Protected from moisture",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "sampling_plan": "ANSI/ASQ Z1.4 Level II",
+            "tests_performed": ["Identification (IR, HPLC)", "Assay (HPLC)", "Related Substances", "Water Content", "Crystallinity", "Sterility"],
+            "gmp_compliance": True,
+            "validated_supplier": True,
+            "dmc_class": "Class III",
+            "pharmacopeia": "USP-NF",
+            "container_type": "Aluminum Drum",
+            "container_count": 3,
+            "net_weight_per_container": 50.0
+        },
+        
+        # Excipients - Inactive Ingredients (per IPEC guidelines)
+        {
+            "batch_id": f"{SITE_CODE}-EXC-{CURRENT_YEAR}-0001",
+            "material_code": "EXC-MCC-101",
+            "material_name": "Microcrystalline Cellulose (Avicel PH-101) NF",
+            "type": "Raw Material",
+            "material_class": "EXCIPIENT",
+            "cas_number": "9004-34-6",
+            "grade": "NF",
+            "quantity": 500.0,
+            "unit": "kg",
+            "manufacturer": "FMC BioPolymer",
+            "manufacturer_lot": "FMC-MCC-2024-8765",
+            "coa_number": "COA-2024-00189",
+            "supplier": "IMCD Pharma",
+            "supplier_code": "SUP-003",
+            "received_date": "2024-01-10",
+            "manufacturing_date": "2023-11-20",
+            "retest_date": "2026-11-20",
+            "expiry_date": "2028-11-20",
+            "storage_condition": "15-25°C, <60% RH",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "function": "Diluent/Filler",
+            "particle_size": "50 µm (D50)",
+            "bulk_density": "0.32 g/mL",
+            "loss_on_drying": "3.2%",
+            "gmp_compliance": True,
+            "validated_supplier": True
+        },
+        {
+            "batch_id": f"{SITE_CODE}-EXC-{CURRENT_YEAR}-0002",
+            "material_code": "EXC-CSS-001",
+            "material_name": "Croscarmellose Sodium (Ac-Di-Sol) NF",
+            "type": "Raw Material",
+            "material_class": "EXCIPIENT",
+            "cas_number": "74811-65-7",
+            "grade": "NF",
+            "quantity": 100.0,
+            "unit": "kg",
+            "manufacturer": "Ashland Specialty Ingredients",
+            "manufacturer_lot": "ASH-CSS-2024-4521",
+            "coa_number": "COA-2024-00192",
+            "supplier": "Brenntag Pharma",
+            "supplier_code": "SUP-004",
+            "received_date": "2024-01-12",
+            "manufacturing_date": "2023-12-01",
+            "retest_date": "2026-12-01",
+            "expiry_date": "2028-12-01",
+            "storage_condition": "15-25°C, <50% RH",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "function": "Disintegrant",
+            "swelling_capacity": "Complies",
+            "gmp_compliance": True,
+            "validated_supplier": True
+        },
+        {
+            "batch_id": f"{SITE_CODE}-EXC-{CURRENT_YEAR}-0003",
+            "material_code": "EXC-MGS-001",
+            "material_name": "Magnesium Stearate NF (Vegetable Grade)",
+            "type": "Raw Material",
+            "material_class": "EXCIPIENT",
+            "cas_number": "557-04-0",
+            "grade": "NF",
+            "quantity": 25.0,
+            "unit": "kg",
+            "manufacturer": "Peter Greven GmbH",
+            "manufacturer_lot": "PG-MGS-2024-2341",
+            "coa_number": "COA-2024-00195",
+            "supplier": "Avantor Performance Materials",
+            "supplier_code": "SUP-005",
+            "received_date": "2024-01-14",
+            "manufacturing_date": "2023-12-10",
+            "retest_date": "2026-12-10",
+            "expiry_date": "2028-12-10",
+            "storage_condition": "15-25°C, <40% RH, Protected from light",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "function": "Lubricant",
+            "specific_surface_area": "8.5 m²/g",
+            "loss_on_drying": "2.1%",
+            "gmp_compliance": True,
+            "validated_supplier": True
+        },
+        {
+            "batch_id": f"{SITE_CODE}-EXC-{CURRENT_YEAR}-0004",
+            "material_code": "EXC-PVP-K30",
+            "material_name": "Povidone K30 (Kollidon 30) USP",
+            "type": "Raw Material",
+            "material_class": "EXCIPIENT",
+            "cas_number": "9003-39-8",
+            "grade": "USP",
+            "quantity": 50.0,
+            "unit": "kg",
+            "manufacturer": "BASF SE",
+            "manufacturer_lot": "BASF-PVP-2024-7892",
+            "coa_number": "COA-2024-00201",
+            "supplier": "BASF Corporation",
+            "supplier_code": "SUP-006",
+            "received_date": "2024-01-16",
+            "manufacturing_date": "2023-12-05",
+            "retest_date": "2026-12-05",
+            "expiry_date": "2028-12-05",
+            "storage_condition": "15-25°C, Protected from moisture",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "function": "Binder",
+            "k_value": "29.2",
+            "viscosity": "5.8 mPa·s",
+            "gmp_compliance": True,
+            "validated_supplier": True
+        },
+        {
+            "batch_id": f"{SITE_CODE}-EXC-{CURRENT_YEAR}-0005",
+            "material_code": "EXC-LAC-DCL",
+            "material_name": "Lactose Monohydrate (FlowLac 100) NF",
+            "type": "Raw Material",
+            "material_class": "EXCIPIENT",
+            "cas_number": "64044-51-5",
+            "grade": "NF",
+            "quantity": 300.0,
+            "unit": "kg",
+            "manufacturer": "Meggle Pharma",
+            "manufacturer_lot": "MEG-LAC-2024-6543",
+            "coa_number": "COA-2024-00198",
+            "supplier": "Meggle USA Inc.",
+            "supplier_code": "SUP-007",
+            "received_date": "2024-01-11",
+            "manufacturing_date": "2023-11-25",
+            "retest_date": "2025-11-25",
+            "expiry_date": "2026-11-25",
+            "storage_condition": "15-25°C, <60% RH",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "function": "Diluent/Filler",
+            "particle_size": "100 µm (D50)",
+            "gmp_compliance": True,
+            "validated_supplier": True
+        },
+        
+        # Process Solvents and Purified Water
+        {
+            "batch_id": f"{SITE_CODE}-SOL-{CURRENT_YEAR}-0001",
+            "material_code": "SOL-PFW-001",
+            "material_name": "Purified Water USP",
+            "type": "Raw Material",
+            "material_class": "PROCESS_AID",
+            "grade": "USP",
+            "quantity": 1000.0,
+            "unit": "L",
+            "manufacturer": "In-House (WFI System)",
+            "manufacturer_lot": f"PW-{CURRENT_YEAR}-01-15",
+            "received_date": "2024-01-15",
+            "manufacturing_date": "2024-01-15",
+            "expiry_date": "2024-01-16",  # 24-hour hold time
+            "storage_condition": "Ambient, Recirculating loop >80°C",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "function": "Granulation Solvent",
+            "conductivity": "0.8 µS/cm",
+            "toc": "125 ppb",
+            "endotoxin": "<0.25 EU/mL",
+            "gmp_compliance": True,
+            "usp_chapter": "<1231>"
+        },
+        
+        # Coating Materials
+        {
+            "batch_id": f"{SITE_CODE}-COT-{CURRENT_YEAR}-0001",
+            "material_code": "COT-OPA-Y-02",
+            "material_name": "Opadry II Yellow (85F92436)",
+            "type": "Raw Material",
+            "material_class": "EXCIPIENT",
+            "grade": "Pharma Grade",
+            "quantity": 20.0,
+            "unit": "kg",
+            "manufacturer": "Colorcon Inc.",
+            "manufacturer_lot": "CLR-OPA-2024-3421",
+            "coa_number": "COA-2024-00205",
+            "supplier": "Colorcon Inc.",
+            "supplier_code": "SUP-008",
+            "received_date": "2024-01-17",
+            "manufacturing_date": "2023-11-15",
+            "retest_date": "2025-11-15",
+            "expiry_date": "2026-11-15",
+            "storage_condition": "15-25°C, <60% RH, Protected from light",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "function": "Film Coating",
+            "color_index": "C.I. 19140, C.I. 77891",
+            "gmp_compliance": True,
+            "validated_supplier": True
+        }
     ]
     
+    # ========== INTERMEDIATE BATCHES (In-Process Materials) ==========
+    intermediate_batches = [
+        # Granulation Batch for Paracetamol Tablets
+        {
+            "batch_id": f"{SITE_CODE}-GRN-{CURRENT_YEAR}-0001",
+            "material_code": "INT-GRN-PARA",
+            "material_name": "Paracetamol Wet Granulate",
+            "type": "Intermediate",
+            "material_class": "INTERMEDIATE",
+            "process_stage": "GRANULATION",
+            "quantity": 180.0,
+            "unit": "kg",
+            "theoretical_yield": 185.0,
+            "actual_yield": 180.0,
+            "yield_percent": 97.3,
+            "manufacturing_date": "2024-02-01",
+            "equipment_id": "GRN-01 (GEA PMA 600)",
+            "room_id": "MFG-201",
+            "room_class": "ISO 8 / Grade D",
+            "temperature": "22°C",
+            "humidity": "45% RH",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "ipc_tests": ["Moisture Content", "Granule Size Distribution", "Bulk Density"],
+            "moisture_content": "2.8%",
+            "lod_limit": "≤4.0%",
+            "batch_record": "BR-GRN-2024-0001",
+            "operator_id": "OP-1456",
+            "verified_by": "QA-0892",
+            "process_parameters": {
+                "impeller_speed": "180 rpm",
+                "chopper_speed": "1500 rpm",
+                "granulation_time": "15 min",
+                "binder_addition_rate": "120 g/min",
+                "inlet_air_temp": "55°C",
+                "product_temp": "35°C"
+            },
+            "consumes": [
+                {"batch_id": f"{SITE_CODE}-API-{CURRENT_YEAR}-0001", "quantity": 100.0, "unit": "kg"},
+                {"batch_id": f"{SITE_CODE}-EXC-{CURRENT_YEAR}-0001", "quantity": 60.0, "unit": "kg"},
+                {"batch_id": f"{SITE_CODE}-EXC-{CURRENT_YEAR}-0004", "quantity": 5.0, "unit": "kg"},
+                {"batch_id": f"{SITE_CODE}-SOL-{CURRENT_YEAR}-0001", "quantity": 40.0, "unit": "L"}
+            ]
+        },
+        # Blending Batch for Paracetamol Tablets
+        {
+            "batch_id": f"{SITE_CODE}-BLD-{CURRENT_YEAR}-0001",
+            "material_code": "INT-BLD-PARA",
+            "material_name": "Paracetamol Tablet Blend (Lubricated)",
+            "type": "Intermediate",
+            "material_class": "INTERMEDIATE",
+            "process_stage": "BLENDING",
+            "quantity": 200.0,
+            "unit": "kg",
+            "theoretical_yield": 202.5,
+            "actual_yield": 200.0,
+            "yield_percent": 98.8,
+            "manufacturing_date": "2024-02-02",
+            "equipment_id": "BLD-02 (Bohle PM 1000)",
+            "room_id": "MFG-202",
+            "room_class": "ISO 8 / Grade D",
+            "temperature": "21°C",
+            "humidity": "42% RH",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "ipc_tests": ["Blend Uniformity", "Bulk Density", "Tap Density", "Flow Properties"],
+            "blend_uniformity_rsd": "1.8%",
+            "bu_limit": "≤5.0% RSD",
+            "batch_record": "BR-BLD-2024-0001",
+            "operator_id": "OP-1478",
+            "verified_by": "QA-0892",
+            "process_parameters": {
+                "blending_speed": "8 rpm",
+                "pre_blend_time": "15 min",
+                "lubricant_blend_time": "3 min",
+                "total_blend_time": "18 min"
+            },
+            "consumes": [
+                {"batch_id": f"{SITE_CODE}-GRN-{CURRENT_YEAR}-0001", "quantity": 180.0, "unit": "kg"},
+                {"batch_id": f"{SITE_CODE}-EXC-{CURRENT_YEAR}-0002", "quantity": 18.0, "unit": "kg"},
+                {"batch_id": f"{SITE_CODE}-EXC-{CURRENT_YEAR}-0003", "quantity": 2.0, "unit": "kg"}
+            ]
+        },
+        # Compression Batch for Paracetamol Tablets
+        {
+            "batch_id": f"{SITE_CODE}-CMP-{CURRENT_YEAR}-0001",
+            "material_code": "INT-CMP-PARA",
+            "material_name": "Paracetamol 500mg Tablet Cores",
+            "type": "Intermediate",
+            "material_class": "BULK",
+            "process_stage": "COMPRESSION",
+            "quantity": 380000,
+            "unit": "tablets",
+            "theoretical_yield": 400000,
+            "actual_yield": 380000,
+            "yield_percent": 95.0,
+            "manufacturing_date": "2024-02-03",
+            "equipment_id": "TAB-01 (Fette P2020)",
+            "room_id": "MFG-203",
+            "room_class": "ISO 8 / Grade D",
+            "temperature": "22°C",
+            "humidity": "40% RH",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "tablet_weight": "550 mg",
+            "weight_variation": "±2.5%",
+            "hardness": "12.5 kp",
+            "hardness_range": "10-15 kp",
+            "thickness": "5.2 mm",
+            "friability": "0.18%",
+            "friability_limit": "≤1.0%",
+            "disintegration": "8 min",
+            "disintegration_limit": "≤15 min",
+            "ipc_tests": ["Weight Variation", "Hardness", "Thickness", "Friability", "Disintegration"],
+            "batch_record": "BR-CMP-2024-0001",
+            "operator_id": "OP-1489",
+            "verified_by": "QA-0893",
+            "process_parameters": {
+                "turret_speed": "45 rpm",
+                "pre_compression_force": "3 kN",
+                "main_compression_force": "25 kN",
+                "fill_depth": "12.5 mm",
+                "tooling": "12mm Round Concave, Plain"
+            },
+            "consumes": [
+                {"batch_id": f"{SITE_CODE}-BLD-{CURRENT_YEAR}-0001", "quantity": 198.0, "unit": "kg"}
+            ]
+        },
+        # Coating Batch for Paracetamol Tablets
+        {
+            "batch_id": f"{SITE_CODE}-COT-{CURRENT_YEAR}-0002",
+            "material_code": "INT-COT-PARA",
+            "material_name": "Paracetamol 500mg Coated Tablets",
+            "type": "Intermediate",
+            "material_class": "BULK",
+            "process_stage": "COATING",
+            "quantity": 375000,
+            "unit": "tablets",
+            "theoretical_yield": 380000,
+            "actual_yield": 375000,
+            "yield_percent": 98.7,
+            "manufacturing_date": "2024-02-04",
+            "equipment_id": "COT-01 (O'Hara LabCoat II)",
+            "room_id": "MFG-204",
+            "room_class": "ISO 8 / Grade D",
+            "temperature": "23°C",
+            "humidity": "35% RH",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "weight_gain": "3.2%",
+            "weight_gain_target": "3.0±0.5%",
+            "coating_uniformity": "Pass",
+            "appearance": "Yellow, round, biconvex film-coated tablets",
+            "batch_record": "BR-COT-2024-0002",
+            "operator_id": "OP-1492",
+            "verified_by": "QA-0894",
+            "process_parameters": {
+                "inlet_air_temp": "55°C",
+                "exhaust_air_temp": "42°C",
+                "product_temp": "40-42°C",
+                "spray_rate": "80 g/min",
+                "pan_speed": "6 rpm",
+                "atomization_pressure": "2.0 bar"
+            },
+            "consumes": [
+                {"batch_id": f"{SITE_CODE}-CMP-{CURRENT_YEAR}-0001", "quantity": 380000, "unit": "tablets"},
+                {"batch_id": f"{SITE_CODE}-COT-{CURRENT_YEAR}-0001", "quantity": 6.3, "unit": "kg"},
+                {"batch_id": f"{SITE_CODE}-SOL-{CURRENT_YEAR}-0001", "quantity": 25.0, "unit": "L"}
+            ]
+        }
+    ]
+    
+    # ========== FINISHED PRODUCTS (Drug Products per NDA/ANDA) ==========
     finished_products = [
-        {"batch_id": "FP-TAB-001", "type": "Finished Product", "material": "Paracetamol 500mg Tablets", "quantity": 100000, "unit": "tablets",
-         "status": "Released", "quality": "A", "product": "Paracetamol 500mg", "expiry_date": "2025-12-31"},
-        {"batch_id": "FP-TAB-002", "type": "Finished Product", "material": "Paracetamol 500mg Tablets", "quantity": 150000, "unit": "tablets",
-         "status": "Released", "quality": "A", "product": "Paracetamol 500mg", "expiry_date": "2025-12-31"},
-        {"batch_id": "FP-TAB-003", "type": "Finished Product", "material": "Amoxicillin 250mg Tablets", "quantity": 80000, "unit": "tablets",
-         "status": "Released", "quality": "A", "product": "Amoxicillin 250mg", "expiry_date": "2025-10-31"},
-        {"batch_id": "FP-CAP-001", "type": "Finished Product", "material": "Vitamin C 500mg Capsules", "quantity": 50000, "unit": "capsules",
-         "status": "Released", "quality": "A", "product": "Vitamin C 500mg", "expiry_date": "2025-09-30"},
-    ]
-    
-    all_batches = raw_materials + finished_products
-    
-    df = pd.DataFrame(all_batches)
-    
-    # Add dates
-    start_date = datetime(2024, 1, 1)
-    for i in range(len(df)):
-        df.loc[i, 'manufacturing_date'] = (start_date + timedelta(days=i*7)).strftime('%Y-%m-%d')
-    
-    return df
-
-def build_batch_genealogy_graph():
-    """
-    Build pharmaceutical batch tree with direct connections
-    """
-    data = create_sample_data()
-    
-    G = nx.DiGraph()
-    
-    # Add all nodes
-    for _, row in data.iterrows():
-        node_attrs = row.to_dict()
-        batch_id = node_attrs.pop('batch_id')
-        G.add_node(batch_id, **node_attrs)
-    
-    # Create DIRECT connections (skip intermediates)
-    # FP-TAB-001 connections
-    connections = [
-        ("RM-API-001", "FP-TAB-001", 50, "kg"),
-        ("RM-EXC-001", "FP-TAB-001", 40, "kg"),
-        ("RM-EXC-002", "FP-TAB-001", 10, "kg"),
-        ("RM-EXC-003", "FP-TAB-001", 1, "kg"),
-        ("RM-SOL-001", "FP-TAB-001", 20, "L"),
-        
-        # FP-TAB-002 connections
-        ("RM-API-001", "FP-TAB-002", 75, "kg"),
-        ("RM-EXC-001", "FP-TAB-002", 60, "kg"),
-        ("RM-EXC-002", "FP-TAB-002", 15, "kg"),
-        ("RM-EXC-003", "FP-TAB-002", 1.5, "kg"),
-        
-        # FP-TAB-003 connections
-        ("RM-API-002", "FP-TAB-003", 40, "kg"),
-        ("RM-EXC-001", "FP-TAB-003", 35, "kg"),
-        ("RM-EXC-002", "FP-TAB-003", 7.5, "kg"),
-        
-        # FP-CAP-001 connections
-        ("RM-API-001", "FP-CAP-001", 25, "kg"),
-        ("RM-EXC-001", "FP-CAP-001", 30, "kg"),
-    ]
-    
-    for source, target, quantity, unit in connections:
-        G.add_edge(source, target, 
-                  relationship="used_in",
-                  quantity=quantity,
-                  unit=unit)
-    
-    print(f"✅ Built pharmaceutical tree with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
-    return G, data
-
-def get_bom_list(batch_id):
-    """Get Bill of Materials for a batch"""
-    bom_data = []
-    
-    sample_boms = {
-        "FP-TAB-001": [
-            {"material": "Paracetamol API", "batch_id": "RM-API-001", "quantity": 50, "unit": "kg", "type": "Raw Material", "status": "Approved"},
-            {"material": "Microcrystalline Cellulose", "batch_id": "RM-EXC-001", "quantity": 40, "unit": "kg", "type": "Raw Material", "status": "Approved"},
-            {"material": "Croscarmellose Sodium", "batch_id": "RM-EXC-002", "quantity": 10, "unit": "kg", "type": "Raw Material", "status": "Approved"},
-            {"material": "Magnesium Stearate", "batch_id": "RM-EXC-003", "quantity": 1, "unit": "kg", "type": "Raw Material", "status": "Approved"},
-            {"material": "Purified Water", "batch_id": "RM-SOL-001", "quantity": 20, "unit": "L", "type": "Raw Material", "status": "Approved"},
-        ],
-        "FP-TAB-002": [
-            {"material": "Paracetamol API", "batch_id": "RM-API-001", "quantity": 75, "unit": "kg", "type": "Raw Material", "status": "Approved"},
-            {"material": "Microcrystalline Cellulose", "batch_id": "RM-EXC-001", "quantity": 60, "unit": "kg", "type": "Raw Material", "status": "Approved"},
-            {"material": "Croscarmellose Sodium", "batch_id": "RM-EXC-002", "quantity": 15, "unit": "kg", "type": "Raw Material", "status": "Approved"},
-            {"material": "Magnesium Stearate", "batch_id": "RM-EXC-003", "quantity": 1.5, "unit": "kg", "type": "Raw Material", "status": "Approved"},
-        ],
-        "FP-TAB-003": [
-            {"material": "Amoxicillin API", "batch_id": "RM-API-002", "quantity": 40, "unit": "kg", "type": "Raw Material", "status": "Approved"},
-            {"material": "Microcrystalline Cellulose", "batch_id": "RM-EXC-001", "quantity": 35, "unit": "kg", "type": "Raw Material", "status": "Approved"},
-            {"material": "Croscarmellose Sodium", "batch_id": "RM-EXC-002", "quantity": 7.5, "unit": "kg", "type": "Raw Material", "status": "Approved"},
-        ],
-        "FP-CAP-001": [
-            {"material": "Paracetamol API", "batch_id": "RM-API-001", "quantity": 25, "unit": "kg", "type": "Raw Material", "status": "Approved"},
-            {"material": "Microcrystalline Cellulose", "batch_id": "RM-EXC-001", "quantity": 30, "unit": "kg", "type": "Raw Material", "status": "Approved"},
-        ]
-    }
-    
-    if batch_id in sample_boms:
-        bom_data = sample_boms[batch_id]
-    
-    return pd.DataFrame(bom_data)
-
-def get_product_list():
-    """Get list of products"""
-    products = [
-        {"product_name": "Paracetamol 500mg", "dosage_form": "Tablet", "strength": "500mg"},
-        {"product_name": "Amoxicillin 250mg", "dosage_form": "Tablet", "strength": "250mg"},
-        {"product_name": "Vitamin C 500mg", "dosage_form": "Capsule", "strength": "500mg"},
-    ]
-    return pd.DataFrame(products)
-
-def analyze_graph(G):
-    """Analyze graph statistics - FIXED VERSION"""
-    stats = {
-        "total_nodes": G.number_of_nodes(),
-        "total_edges": G.number_of_edges(),
-        "raw_materials": len([n for n in G.nodes() if G.nodes[n].get("type") == "Raw Material"]),
-        "finished_products": len([n for n in G.nodes() if G.nodes[n].get("type") == "Finished Product"]),
-        "is_connected": nx.is_weakly_connected(G) if G.number_of_nodes() > 0 else False,
-    }
-    return stats
+        {
+            "batch_id": f"{SITE_CODE}-FP-{CURRENT_YEAR}-0001",
+            "material_code": "FP-PARA-500",
+            "material_name": "Paracetamol Tablets 500mg",
+            "product_name": "PARAMAX® 500",
+            "type": "Finished Product",
+            "material_class": "FINISHED",
+            "nda_number": "NDA 018-XXX",
+            "dosage_form": "Film-Coated Tablet",
+            "strength": "500 mg",
+            "route": "Oral",
+            "quantity": 350000,
+            "unit": "tablets",
+            "pack_size": "100 tablets/bottle",
+            "bottles_produced": 3500,
+            "theoretical_yield": 375000,
+            "actual_yield": 350000,
+            "yield_percent": 93.3,
+            "manufacturing_date": "2024-02-05",
+            "packaging_date": "2024-02-06",
+            "release_date": "2024-02-15",
+            "expiry_date": "2026-02-05",
+            "shelf_life": "24 months",
+            "storage_condition": "Store below 25°C. Protect from moisture.",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "equipment_id": "PKG-01 (Uhlmann UPS 4)",
+            "room_id": "PKG-101",
+            "room_class": "ISO 8 / Grade D",
+            "batch_record": "BR-FP-2024-0001",
+            "coa_issued": True,
+            "coa_number": "COA-FP-2024-0001",
+            "stability_protocol": "SP-PARA-001",
+            "release_specifications": {
+                "description": "Yellow, round, biconvex film-coated tablets",
+                "identification_ir": "Complies",
+                "identification_hplc": "Complies",
+                "assay": "99.2%",
+                "assay_limit": "95.0-105.0%",
+                "dissolution": "98%",
+                "dissolution_limit": "≥80% in 30 min",
+                "content_uniformity": "AV = 3.2",
+                "cu_limit": "AV ≤ 15.0",
+                "related_substances": "0.08%",
+                "rs_limit": "≤0.5%",
+                "microbial_limits": "Complies",
+                "water_content": "2.1%",
+                "water_limit": "≤5.0%"
+            },
+            "consumes": [
+                {"batch_id": f"{SITE_CODE}-COT-{CURRENT_YEAR}-0002", "quantity": 350000, "unit": "tablets"}
+            ],
+            "qa_disposition": {
+                "disposition_date": "2024-02-15",
+                "disposition_by": "QA-0890",
+                "disposition": "APPROVED FOR RELEASE",
+                "deviations": [],
+                "oost_investigations": [],
+                "comments": "Batch meets all release specifications. Approved for commercial distribution."
+            }
+        },
+        {
+            "batch_id": f"{SITE_CODE}-FP-{CURRENT_YEAR}-0002",
+            "material_code": "FP-AMOX-250",
+            "material_name": "Amoxicillin Capsules 250mg",
+            "product_name": "AMOXIL® 250",
+            "type": "Finished Product",
+            "material_class": "FINISHED",
+            "nda_number": "NDA 050-XXX",
+            "dosage_form": "Hard Gelatin Capsule",
+            "strength": "250 mg",
+            "route": "Oral",
+            "quantity": 200000,
+            "unit": "capsules",
+            "pack_size": "20 capsules/blister",
+            "packs_produced": 10000,
+            "theoretical_yield": 210000,
+            "actual_yield": 200000,
+            "yield_percent": 95.2,
+            "manufacturing_date": "2024-02-10",
+            "packaging_date": "2024-02-12",
+            "release_date": "2024-02-20",
+            "expiry_date": "2026-02-10",
+            "shelf_life": "24 months",
+            "storage_condition": "Store below 25°C. Protect from moisture.",
+            "status": "RELEASED",
+            "quality_status": "Approved",
+            "equipment_id": "CAP-01 (Bosch GKF 1500)",
+            "room_id": "MFG-301",
+            "room_class": "ISO 7 / Grade C",
+            "batch_record": "BR-FP-2024-0002",
+            "coa_issued": True,
+            "coa_number": "COA-FP-2024-0002",
+            "stability_protocol": "SP-AMOX-001",
+            "release_specifications": {
+                "description": "Size 0 hard gelatin capsules with white body and red cap",
+                "identification_ir": "Complies",
+                "identification_hplc": "Complies",
+                "assay": "98.5%",
+                "assay_limit": "90.0-120.0%",
+                "dissolution": "95%",
+                "dissolution_limit": "≥80% in 60 min",
+                "content_uniformity": "AV = 4.1",
+                "cu_limit": "AV ≤ 15.0",
+                "related_substances": "0.12%",
+                "rs_limit": 
