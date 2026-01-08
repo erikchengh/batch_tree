@@ -1,169 +1,118 @@
-def load_mock_batch(batch_id):
-    """Real batch genealogy data with material consumption/production relationships"""
+import pandas as pd
+from datetime import datetime, timedelta
+
+def generate_batch_data():
+    """Generate realistic pharmaceutical batch data with genealogy"""
     
-    # Mock database of batches and their genealogy
-    batch_db = {
-        "B001": {
-            "batch": {
-                "id": "B001",
-                "product": "Tablet_A",
-                "status": "Completed",
-                "manufacturing_date": "2026-01-07",
-                "quantity": "100,000 tablets",
-                "lot_number": "LOT20260107A"
-            },
-            # Material CONSUMPTION (Bill of Materials)
-            "consumes": [
-                {
-                    "material_batch": "API-2025-12-15",
-                    "material_name": "Active Pharmaceutical Ingredient",
-                    "quantity": "500 kg",
-                    "specification": "API-001-SPEC",
-                    "supplier": "Supplier_A",
-                    "type": "raw"
-                },
-                {
-                    "material_batch": "EXC-2026-01-02",
-                    "material_name": "Excipient Blend",
-                    "quantity": "950 kg",
-                    "specification": "EXC-002-SPEC",
-                    "supplier": "Supplier_B",
-                    "type": "intermediate"
-                },
-                {
-                    "material_batch": "COA-2025-11-30",
-                    "material_name": "Coating Solution",
-                    "quantity": "200 L",
-                    "specification": "COA-003-SPEC",
-                    "supplier": "Supplier_C",
-                    "type": "raw"
-                }
-            ],
-            # Material PRODUCTION (what this batch produces)
-            "produces": [
-                {
-                    "product_batch": "FIN-2026-01-10",
-                    "product_name": "Finished Tablets",
-                    "quantity": "100,000 bottles",
-                    "specification": "FIN-001-SPEC"
-                }
-            ],
-            # Parent batches (what batches were used to make this)
-            "parents": ["API-2025-12-15", "EXC-2026-01-02"],
-            # Child batches (what batches were produced from this)
-            "children": ["FIN-2026-01-10"]
-        },
-        "API-2025-12-15": {
-            "batch": {
-                "id": "API-2025-12-15",
-                "product": "Active Pharmaceutical Ingredient",
-                "status": "Completed",
-                "manufacturing_date": "2025-12-15",
-                "quantity": "1000 kg",
-                "lot_number": "LOT20251215API"
-            },
-            "consumes": [
-                {
-                    "material_batch": "RAW-001",
-                    "material_name": "Chemical Precursor A",
-                    "quantity": "1200 kg",
-                    "type": "raw"
-                },
-                {
-                    "material_batch": "RAW-002",
-                    "material_name": "Solvent B",
-                    "quantity": "5000 L",
-                    "type": "raw"
-                }
-            ],
-            "produces": [
-                {
-                    "product_batch": "API-2025-12-15",
-                    "product_name": "Active Pharmaceutical Ingredient",
-                    "quantity": "1000 kg"
-                }
-            ],
-            "parents": ["RAW-001", "RAW-002"],
-            "children": ["B001", "B002"]  # Used in multiple final batches
-        },
-        "EXC-2026-01-02": {
-            "batch": {
-                "id": "EXC-2026-01-02",
-                "product": "Excipient Blend",
-                "status": "Completed",
-                "manufacturing_date": "2026-01-02",
-                "quantity": "2000 kg",
-                "lot_number": "LOT20260102EXC"
-            },
-            "consumes": [
-                {
-                    "material_batch": "MCC-2025-12-20",
-                    "material_name": "Microcrystalline Cellulose",
-                    "quantity": "800 kg",
-                    "type": "raw"
-                },
-                {
-                    "material_batch": "LAC-2025-12-22",
-                    "material_name": "Lactose Monohydrate",
-                    "quantity": "700 kg",
-                    "type": "raw"
-                },
-                {
-                    "material_batch": "MGS-2025-12-18",
-                    "material_name": "Magnesium Stearate",
-                    "quantity": "500 kg",
-                    "type": "raw"
-                }
-            ],
-            "produces": [
-                {
-                    "product_batch": "EXC-2026-01-02",
-                    "product_name": "Excipient Blend",
-                    "quantity": "2000 kg"
-                }
-            ],
-            "parents": ["MCC-2025-12-20", "LAC-2025-12-22", "MGS-2025-12-18"],
-            "children": ["B001", "B003"]
-        },
-        "FIN-2026-01-10": {
-            "batch": {
-                "id": "FIN-2026-01-10",
-                "product": "Finished Tablets",
-                "status": "Released",
-                "manufacturing_date": "2026-01-10",
-                "quantity": "100,000 bottles",
-                "lot_number": "LOT20260110FIN"
-            },
-            "consumes": [
-                {
-                    "material_batch": "B001",
-                    "material_name": "Tablet Cores",
-                    "quantity": "100,000 tablets",
-                    "type": "intermediate"
-                },
-                {
-                    "material_batch": "PKG-2026-01-09",
-                    "material_name": "Packaging Material",
-                    "quantity": "100,000 units",
-                    "type": "packaging"
-                }
-            ],
-            "produces": [
-                {
-                    "product_batch": "FIN-2026-01-10",
-                    "product_name": "Finished Product",
-                    "quantity": "100,000 bottles",
-                    "customer": "Hospital Chain XYZ",
-                    "expiry_date": "2027-07-10"
-                }
-            ],
-            "parents": ["B001", "PKG-2026-01-09"],
-            "children": []  # Final product, no further children
-        }
+    # Raw Material Batches
+    raw_materials = [
+        {"batch_id": "RM-API-001", "material": "Active API", "lot": "LOT-API-2024-01", 
+         "quantity": 500.0, "unit": "kg", "supplier": "PharmaChem Inc.", 
+         "received_date": "2024-01-15", "expiry": "2026-01-15", "quality": "Released"},
+        {"batch_id": "RM-EXC-001", "material": "Microcrystalline Cellulose", "lot": "LOT-EXC-2024-02",
+         "quantity": 1000.0, "unit": "kg", "supplier": "FMC BioPolymer", 
+         "received_date": "2024-01-20", "expiry": "2025-07-20", "quality": "Released"},
+        {"batch_id": "RM-LUB-001", "material": "Magnesium Stearate", "lot": "LOT-LUB-2024-01",
+         "quantity": 50.0, "unit": "kg", "supplier": "Peter Greven", 
+         "received_date": "2024-01-10", "expiry": "2025-10-10", "quality": "Released"},
+        {"batch_id": "RM-DIS-001", "material": "Purified Water", "lot": "LOT-DIS-2024-01",
+         "quantity": 2000.0, "unit": "L", "supplier": "Internal", 
+         "received_date": "2024-01-05", "expiry": "2024-02-05", "quality": "Released"},
+    ]
+    
+    # Intermediate Batches
+    intermediate_batches = [
+        {"batch_id": "INT-BLEND-001", "material": "Tablet Blend", "product": "Tablet_A",
+         "quantity": 1450.0, "unit": "kg", "manufacturing_date": "2024-02-01",
+         "status": "Completed", "quality": "Released",
+         "consumes": [
+             {"batch_id": "RM-API-001", "quantity": 500.0, "unit": "kg"},
+             {"batch_id": "RM-EXC-001", "quantity": 950.0, "unit": "kg"}
+         ]},
+        {"batch_id": "INT-COAT-001", "material": "Coating Solution", "product": "Tablet_A",
+         "quantity": 200.0, "unit": "L", "manufacturing_date": "2024-02-02",
+         "status": "Completed", "quality": "Released",
+         "consumes": [
+             {"batch_id": "RM-DIS-001", "quantity": 180.0, "unit": "L"}
+         ]},
+    ]
+    
+    # Finished Product Batches
+    finished_products = [
+        {"batch_id": "FP-TAB-001", "material": "Tablet_A 500mg", "product": "Tablet_A",
+         "quantity": 1000000, "unit": "tablets", "manufacturing_date": "2024-02-05",
+         "expiry": "2026-02-05", "status": "Released", "quality": "Approved",
+         "consumes": [
+             {"batch_id": "INT-BLEND-001", "quantity": 1450.0, "unit": "kg"},
+             {"batch_id": "RM-LUB-001", "quantity": 5.0, "unit": "kg"},
+             {"batch_id": "INT-COAT-001", "quantity": 150.0, "unit": "L"}
+         ]},
+        {"batch_id": "FP-TAB-002", "material": "Tablet_A 500mg", "product": "Tablet_A",
+         "quantity": 1500000, "unit": "tablets", "manufacturing_date": "2024-02-10",
+         "expiry": "2026-02-10", "status": "Released", "quality": "Approved",
+         "consumes": [
+             {"batch_id": "RM-API-001", "quantity": 750.0, "unit": "kg"},
+             {"batch_id": "RM-EXC-001", "quantity": 1425.0, "unit": "kg"},
+             {"batch_id": "RM-LUB-001", "quantity": 7.5, "unit": "kg"}
+         ]},
+    ]
+    
+    # Batch Genealogy Relationships
+    genealogy = []
+    
+    # Add consumption relationships
+    for batch in intermediate_batches + finished_products:
+        if "consumes" in batch:
+            for consumed in batch["consumes"]:
+                genealogy.append({
+                    "parent_batch": consumed["batch_id"],
+                    "child_batch": batch["batch_id"],
+                    "relationship": "consumed_by",
+                    "quantity": consumed["quantity"],
+                    "unit": consumed["unit"]
+                })
+    
+    # Add manufacturing sequence relationships
+    genealogy.extend([
+        {"parent_batch": "INT-BLEND-001", "child_batch": "FP-TAB-001", "relationship": "precedes", "quantity": None, "unit": None},
+        {"parent_batch": "INT-COAT-001", "child_batch": "FP-TAB-001", "relationship": "coated_with", "quantity": None, "unit": None},
+    ])
+    
+    # All batches combined
+    all_batches = raw_materials + intermediate_batches + finished_products
+    
+    return {
+        "batches": pd.DataFrame(all_batches),
+        "genealogy": pd.DataFrame(genealogy),
+        "raw_materials": pd.DataFrame(raw_materials),
+        "intermediate": pd.DataFrame(intermediate_batches),
+        "finished": pd.DataFrame(finished_products)
     }
+
+def get_batch_details(batch_id):
+    """Get detailed information about a specific batch"""
+    data = generate_batch_data()
     
-    # Return the specific batch or all if batch_id is "ALL"
-    if batch_id == "ALL":
-        return list(batch_db.values())
-    else:
-        return batch_db.get(batch_id, batch_db["B001"])
+    # Find the batch
+    batch_row = data["batches"][data["batches"]["batch_id"] == batch_id]
+    if batch_row.empty:
+        return None
+    
+    batch_info = batch_row.iloc[0].to_dict()
+    
+    # Find what this batch consumes
+    consumes = data["genealogy"][data["genealogy"]["parent_batch"] == batch_id]
+    
+    # Find what batches consume this batch
+    consumed_by = data["genealogy"][data["genealogy"]["child_batch"] == batch_id]
+    
+    return {
+        "batch_info": batch_info,
+        "consumes": consumes.to_dict('records'),  # What this batch consumes
+        "consumed_by": consumed_by.to_dict('records'),  # What consumes this batch
+        "batch_type": (
+            "Raw Material" if batch_id.startswith("RM-") else
+            "Intermediate" if batch_id.startswith("INT-") else
+            "Finished Product"
+        )
+    }
