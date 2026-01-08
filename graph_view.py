@@ -4,6 +4,7 @@ import networkx as nx
 import tempfile
 import os
 import json
+import re
 
 def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
     """
@@ -158,24 +159,30 @@ def calculate_trace_highlights(G, target_batch_id, trace_mode):
         highlight_nodes.add(target_batch_id)
         
         if trace_mode in ["forward", "both"]:
-            descendants = nx.descendants(G, target_batch_id)
-            highlight_nodes.update(descendants)
-            
-            for desc in descendants:
-                if nx.has_path(G, target_batch_id, desc):
-                    path = nx.shortest_path(G, target_batch_id, desc)
-                    for i in range(len(path) - 1):
-                        highlight_edges.add((path[i], path[i + 1]))
+            try:
+                descendants = nx.descendants(G, target_batch_id)
+                highlight_nodes.update(descendants)
+                
+                for desc in descendants:
+                    if nx.has_path(G, target_batch_id, desc):
+                        path = nx.shortest_path(G, target_batch_id, desc)
+                        for i in range(len(path) - 1):
+                            highlight_edges.add((path[i], path[i + 1]))
+            except nx.NetworkXError:
+                pass
         
         if trace_mode in ["backward", "both"]:
-            ancestors = nx.ancestors(G, target_batch_id)
-            highlight_nodes.update(ancestors)
-            
-            for anc in ancestors:
-                if nx.has_path(G, anc, target_batch_id):
-                    path = nx.shortest_path(G, anc, target_batch_id)
-                    for i in range(len(path) - 1):
-                        highlight_edges.add((path[i], path[i + 1]))
+            try:
+                ancestors = nx.ancestors(G, target_batch_id)
+                highlight_nodes.update(ancestors)
+                
+                for anc in ancestors:
+                    if nx.has_path(G, anc, target_batch_id):
+                        path = nx.shortest_path(G, anc, target_batch_id)
+                        for i in range(len(path) - 1):
+                            highlight_edges.add((path[i], path[i + 1]))
+            except nx.NetworkXError:
+                pass
     
     return highlight_nodes, highlight_edges
 
@@ -324,25 +331,30 @@ def get_pharma_node_styling(node_data, node_id, target_batch_id, is_highlighted)
 def format_pharma_label(batch_id, material):
     """Format pharmaceutical labels professionally"""
     # Shorten material name
-    material_words = str(material).split()
-    if len(material_words) > 3:
-        material_short = ' '.join(material_words[:3]) + '...'
+    if isinstance(material, str):
+        material_words = material.split()
+        if len(material_words) > 3:
+            material_short = ' '.join(material_words[:3]) + '...'
+        else:
+            material_short = material
     else:
         material_short = str(material)
     
     # Use batch ID abbreviation
-    if batch_id.startswith("RM-"):
-        prefix = "RM"
-    elif batch_id.startswith("INT-"):
-        prefix = "INT"
-    elif batch_id.startswith("FP-"):
-        prefix = "FP"
+    if isinstance(batch_id, str):
+        if batch_id.startswith("RM-"):
+            prefix = "RM"
+        elif batch_id.startswith("INT-"):
+            prefix = "INT"
+        elif batch_id.startswith("FP-"):
+            prefix = "FP"
+        else:
+            prefix = batch_id.split('-')[0] if '-' in batch_id else batch_id[:4]
     else:
-        prefix = batch_id.split('-')[0] if '-' in batch_id else batch_id[:4]
+        prefix = str(batch_id)[:4]
     
     # Get numeric part
-    import re
-    numbers = re.findall(r'\d+', batch_id)
+    numbers = re.findall(r'\d+', str(batch_id))
     number_part = numbers[0] if numbers else ""
     
     return f"{prefix}-{number_part}\n{material_short[:15]}"
@@ -421,22 +433,49 @@ def format_edge_label(edge_data):
     
     display_rel = rel_map.get(relationship, relationship.replace("_", " ").title())
     
-    if quantity:
-        # Format quantity professionally
-        if isinstance(quantity, (int, float)):
-            if quantity >= 1000:
-                formatted_qty = f"{quantity/1000:.1f}k"
+    if quantity is not None and str(quantity).strip():
+        try:
+            # Try to convert quantity to a number
+            if isinstance(quantity, str):
+                # Remove any non-numeric characters (except decimal point)
+                quantity_str = re.sub(r'[^\d.]', '', quantity)
+                if quantity_str:
+                    quantity_num = float(quantity_str)
+                else:
+                    quantity_num = None
             else:
-                formatted_qty = str(int(quantity))
-            return f"{display_rel}\n{formatted_qty} {unit}"
+                quantity_num = float(quantity)
+            
+            if quantity_num is not None:
+                # Format quantity professionally
+                if quantity_num >= 1000:
+                    formatted_qty = f"{quantity_num/1000:.1f}k"
+                elif quantity_num == int(quantity_num):
+                    # If it's a whole number, display as integer
+                    formatted_qty = str(int(quantity_num))
+                else:
+                    # If it has decimals, display with 1 decimal place
+                    formatted_qty = f"{quantity_num:.1f}"
+                
+                # Add unit if provided
+                if unit:
+                    return f"{display_rel}\n{formatted_qty} {unit}"
+                else:
+                    return f"{display_rel}\n{formatted_qty}"
+        except (ValueError, TypeError, AttributeError):
+            # If conversion fails, just use the relationship
+            pass
     
     return display_rel
 
 def generate_pharma_tooltip(node_data, node_id):
     """Generate professional pharmaceutical tooltip"""
     # Extract batch label for tooltip header
-    label_parts = node_data.get("label", "Pharma Batch").split('\n')
-    batch_label = label_parts[0] if len(label_parts) > 0 else "Pharma Batch"
+    if "label" in node_data:
+        label_parts = str(node_data.get("label")).split('\n')
+        batch_label = label_parts[0] if len(label_parts) > 0 else str(node_id)
+    else:
+        batch_label = str(node_id)
     
     tooltip = f"""
     <div style="padding: 12px; font-family: 'Arial', sans-serif; max-width: 350px; background: white; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.15); border-left: 4px solid {node_data.get('color', '#1e88e5')};">
@@ -459,7 +498,7 @@ def generate_pharma_tooltip(node_data, node_id):
     ]
     
     for icon, label, value, color in fields:
-        if value and str(value).strip() and str(value).lower() != "nan":
+        if value is not None and str(value).strip() and str(value).lower() != "nan":
             tooltip += f"""
             <tr>
                 <td style="padding: 4px 0; color: #546e7a; font-weight: 500; width: 40%;">{icon} {label}:</td>
@@ -470,13 +509,15 @@ def generate_pharma_tooltip(node_data, node_id):
     # Add additional fields if they exist
     additional_fields = ["lot", "expiry_date", "manufacturer", "location"]
     for field in additional_fields:
-        if field in node_data:
-            tooltip += f"""
-            <tr>
-                <td style="padding: 4px 0; color: #546e7a; font-weight: 500;">📋 {field.title()}:</td>
-                <td style="padding: 4px 0; color: #757575; font-weight: 500; text-align: right;">{node_data[field]}</td>
-            </tr>
-            """
+        if field in node_data and node_data[field] is not None:
+            value = node_data[field]
+            if str(value).strip() and str(value).lower() != "nan":
+                tooltip += f"""
+                <tr>
+                    <td style="padding: 4px 0; color: #546e7a; font-weight: 500;">📋 {field.title()}:</td>
+                    <td style="padding: 4px 0; color: #757575; font-weight: 500; text-align: right;">{value}</td>
+                </tr>
+                """
     
     tooltip += """
         </table>
