@@ -1,6 +1,6 @@
 import networkx as nx
 from data_mock import load_mock_batch
-
+ 
 def build_batch_genealogy_graph(target_batch_id, depth=2):
     """
     Build a genealogy graph showing material flow
@@ -51,7 +51,7 @@ def build_batch_genealogy_graph(target_batch_id, depth=2):
                 
                 # Add edge: material → batch (material is CONSUMED BY batch)
                 G.add_edge(
-                    material_id, 
+                    material_id,
                     batch_id,
                     relationship="consumed_by",
                     quantity=material["quantity"],
@@ -95,7 +95,7 @@ def build_batch_genealogy_graph(target_batch_id, depth=2):
     add_batch_to_graph(target_batch_id, depth, direction="both")
     
     return G
-
+ 
 def get_bom_list(batch_id):
     """Get complete Bill of Materials for a batch"""
     batch_data = load_mock_batch(batch_id)
@@ -127,7 +127,7 @@ def get_bom_list(batch_id):
     
     extract_bom(batch_id)
     return bom
-
+ 
 def get_product_genealogy(batch_id, direction="down"):
     """Get all products made from this batch (downstream) or batches that made it (upstream)"""
     genealogy = []
