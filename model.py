@@ -109,3 +109,24 @@ def get_product_list():
     """Get list of all finished products"""
     data = generate_batch_data()
     return data["finished"][["batch_id", "material", "quantity", "unit", "manufacturing_date", "expiry"]]
+
+# In build_batch_genealogy_graph function:
+def build_batch_genealogy_graph():
+    G = nx.DiGraph()
+    
+    # Add nodes like this:
+    G.add_node(
+        batch["batch_id"],
+        label=f"{batch['batch_id']}\n{batch['material']}",  # REQUIRED
+        type=batch_type,  # REQUIRED: "Raw Material", "Intermediate", or "Finished Product"
+        material=batch["material"],
+        product=batch.get("product", ""),
+        quantity=f"{batch['quantity']} {batch['unit']}",
+        status=batch.get("status", ""),
+        quality=batch.get("quality", ""),
+        color=color,        # REQUIRED for coloring
+        shape=shape,        # REQUIRED: "ellipse", "box", or "star"
+        size=size           # REQUIRED: 20, 25, or 35
+    )
+    
+    return G, data
