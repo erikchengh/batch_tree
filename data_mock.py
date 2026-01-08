@@ -26,7 +26,7 @@ def load_mock_batch(batch_id):
                     "material_batch": "EXC-2026-01-02",
                     "material_name": "Excipient Blend",
                     "quantity": "950 kg",
-                    "specification": "EXC-002-SPEC", 
+                    "specification": "EXC-002-SPEC",
                     "supplier": "Supplier_B",
                     "type": "intermediate"
                 },
@@ -70,7 +70,7 @@ def load_mock_batch(batch_id):
                     "type": "raw"
                 },
                 {
-                    "material_batch": "RAW-002", 
+                    "material_batch": "RAW-002",
                     "material_name": "Solvent B",
                     "quantity": "5000 L",
                     "type": "raw"
@@ -105,7 +105,7 @@ def load_mock_batch(batch_id):
                 {
                     "material_batch": "LAC-2025-12-22",
                     "material_name": "Lactose Monohydrate",
-                    "quantity": "700 kg", 
+                    "quantity": "700 kg",
                     "type": "raw"
                 },
                 {
