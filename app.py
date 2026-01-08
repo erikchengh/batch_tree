@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
-from model import build_batch_genealogy_graph, get_bom_list, get_product_genealogy
+from model import build_batch_genealogy_graph, get_bom_list, get_product_list
 from graph_view import render_genealogy_graph
 
+# Page configuration
 st.set_page_config(
     page_title="Pharma Batch Genealogy System",
     layout="wide",
-    page_icon="🏭"
+    initial_sidebar_state="expanded"
 )
 
 # Custom CSS
@@ -15,251 +16,240 @@ st.markdown("""
     .main-header {
         font-size: 2.8rem;
         color: #2c3e50;
+        font-weight: 700;
         padding-bottom: 1rem;
         border-bottom: 3px solid #3498db;
         margin-bottom: 2rem;
-        text-align: center;
+        background: linear-gradient(90deg, #2c3e50, #3498db);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
     }
-    .section-header {
-        font-size: 1.5rem;
-        color: #34495e;
-        margin-top: 1.5rem;
-        margin-bottom: 1rem;
-        padding-bottom: 0.5rem;
-        border-bottom: 2px solid #ecf0f1;
-    }
+    
     .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
         padding: 1.2rem;
         border-radius: 12px;
+        border-left: 5px solid #3498db;
         margin: 0.5rem 0;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
-    .data-table {
-        font-size: 0.9rem;
+    
+    .stButton > button {
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        font-weight: 500;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(52, 152, 219, 0.2);
+    }
+    
+    .highlight-box {
+        background-color: #e3f2fd;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid #2196f3;
+        margin: 1rem 0;
+    }
+    
+    .dataframe {
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Header
+# Title
 st.markdown("<h1 class='main-header'>🏭 Pharmaceutical Batch Genealogy & Traceability System</h1>", unsafe_allow_html=True)
 
-# Sidebar Controls
+# Sidebar
 with st.sidebar:
     st.markdown("### 🔍 Batch Selection")
     
-    available_batches = ["B001", "API-2025-12-15", "EXC-2026-01-02", "FIN-2026-01-10"]
+    # Get product list for selection
+    products_df = get_product_list()
+    product_options = products_df["batch_id"].tolist()
+    
     selected_batch = st.selectbox(
         "Select Target Batch",
-        available_batches,
+        options=product_options,
         index=0,
-        help="Select a batch to trace its genealogy"
+        help="Select a finished product batch to trace"
     )
     
     st.divider()
+    
     st.markdown("### ⚙️ Visualization Settings")
-    
-    trace_depth = st.slider(
-        "Trace Depth",
-        min_value=1,
-        max_value=4,
-        value=2,
-        help="How many levels up/down to trace"
-    )
-    
-    show_quantities = st.toggle("Show Quantities", value=True)
-    
-    analysis_type = st.radio(
-        "Analysis Type",
-        ["Genealogy Graph", "Bill of Materials", "Product Trace"],
-        index=0
-    )
-    
-    st.divider()
-    st.markdown("### ℹ️ About")
-    st.info("""
-    This system traces:
-    - **Upstream**: What raw materials were used
-    - **Downstream**: What products were made
-    - **Complete BOM**: All materials consumed
-    """)
-
-# Main Content Area
-if analysis_type == "Genealogy Graph":
-    # Build and display genealogy graph
-    st.markdown(f"### 📊 Batch Genealogy: `{selected_batch}`")
-    
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        st.caption("Material Flow: ← Raw Materials → Finished Products")
-    with col2:
-        if st.button("🔄 Refresh Graph", use_container_width=True):
-            st.rerun()
-    with col3:
-        if st.button("📥 Export Data", use_container_width=True):
-            st.info("Export functionality to be implemented")
-    
-    # Build graph
-    G = build_batch_genealogy_graph(selected_batch, depth=trace_depth)
-    
-    # Display graph
-    render_genealogy_graph(
-        G, 
-        selected_batch=selected_batch,
-        show_quantities=show_quantities
-    )
-    
-    # Node details
-    st.markdown("<div class='section-header'>📋 Selected Batch Details</div>", unsafe_allow_html=True)
-    
-    if selected_batch:
-        # Get batch info from graph
-        if selected_batch in G.nodes:
-            batch_data = G.nodes[selected_batch]
-            
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Batch ID", selected_batch)
-            with col2:
-                st.metric("Product", batch_data.get("product", "N/A"))
-            with col3:
-                status = batch_data.get("status", "Unknown")
-                color = "🟢" if status in ["Completed", "Released"] else "🟡" if status == "In Progress" else "🔴"
-                st.metric("Status", f"{color} {status}")
-            
-            # Additional details
-            with st.expander("📄 Batch Details", expanded=True):
-                cols = st.columns(4)
-                with cols[0]:
-                    if batch_data.get("quantity"):
-                        st.write(f"**Quantity:** {batch_data['quantity']}")
-                with cols[1]:
-                    if batch_data.get("date"):
-                        st.write(f"**Manufacturing Date:** {batch_data['date']}")
-                with cols[2]:
-                    if batch_data.get("lot"):
-                        st.write(f"**Lot Number:** {batch_data['lot']}")
-                with cols[3]:
-                    # Count connections
-                    in_degree = G.in_degree(selected_batch)
-                    out_degree = G.out_degree(selected_batch)
-                    st.write(f"**Connections:** {in_degree} in, {out_degree} out")
-
-elif analysis_type == "Bill of Materials":
-    st.markdown(f"### 📋 Complete Bill of Materials: `{selected_batch}`")
-    
-    # Get BOM
-    bom_data = get_bom_list(selected_batch)
-    
-    if bom_data:
-        # Convert to DataFrame for display
-        df_bom = pd.DataFrame(bom_data)
-        
-        # Add indentation for levels
-        def indent_name(row):
-            indent = "&nbsp;" * (row['level'] * 4)
-            icon = "📦" if row['type'] == 'raw' else "⚙️" if row['type'] == 'intermediate' else "📁"
-            return f"{indent}{icon} {row['material_name']}"
-        
-        df_bom['Material'] = df_bom.apply(indent_name, axis=1)
-        
-        # Display BOM
-        st.dataframe(
-            df_bom[['Material', 'material_batch', 'quantity', 'type', 'specification', 'supplier']],
-            column_config={
-                "Material": st.column_config.TextColumn("Material", width="large"),
-                "material_batch": "Batch ID",
-                "quantity": "Quantity",
-                "type": "Type",
-                "specification": "Specification",
-                "supplier": "Supplier"
-            },
-            use_container_width=True,
-            hide_index=True
-        )
-        
-        # BOM Summary
-        st.markdown("<div class='section-header'>📈 BOM Summary</div>", unsafe_allow_html=True)
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            total_items = len(df_bom)
-            st.metric("Total Items", total_items)
-        with col2:
-            raw_materials = len(df_bom[df_bom['type'] == 'raw'])
-            st.metric("Raw Materials", raw_materials)
-        with col3:
-            unique_suppliers = df_bom['supplier'].nunique()
-            st.metric("Unique Suppliers", unique_suppliers)
-        with col4:
-            total_batches = df_bom['material_batch'].nunique()
-            st.metric("Unique Batches", total_batches)
-    else:
-        st.warning(f"No BOM data available for batch {selected_batch}")
-
-elif analysis_type == "Product Trace":
-    st.markdown(f"### 🔄 Product Traceability: `{selected_batch}`")
     
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("##### ⬆️ Upstream Trace (What made this)")
-        upstream = get_product_genealogy(selected_batch, direction="up")
-        
-        if upstream:
-            for item in upstream:
-                level_indent = "&nbsp;" * (item['level'] * 4)
-                icon = "🔼" if item['level'] == 0 else "↗️" if item['level'] < 0 else "↘️"
-                
-                with st.container():
-                    cols = st.columns([1, 3, 2, 2])
-                    with cols[0]:
-                        st.write(f"{level_indent}{icon}")
-                    with cols[1]:
-                        st.write(f"**{item['batch_id']}**")
-                    with cols[2]:
-                        st.write(item['product'])
-                    with cols[3]:
-                        st.write(item['quantity'])
-        else:
-            st.info("No upstream trace data available")
-    
+        show_upstream = st.toggle(
+            "Show Raw Materials", 
+            value=True,
+            help="Show raw materials feeding into selected batch"
+        )
     with col2:
-        st.markdown("##### ⬇️ Downstream Trace (What this made)")
-        downstream = get_product_genealogy(selected_batch, direction="down")
+        show_downstream = st.toggle(
+            "Show Products", 
+            value=False,
+            help="Show products using selected batch"
+        )
+    
+    trace_mode = st.radio(
+        "Trace Mode",
+        ["Full Genealogy", "Raw Materials Only", "Production Flow"],
+        index=0,
+        help="Control what relationships to show"
+    )
+    
+    st.divider()
+    
+    # Quick stats
+    G, _ = build_batch_genealogy_graph()
+    batch_details = G.nodes.get(selected_batch, {})
+    
+    st.markdown("### 📊 Batch Info")
+    if batch_details:
+        st.markdown(f"**Batch:** `{selected_batch}`")
+        st.markdown(f"**Type:** `{batch_details.get('type', 'N/A')}`")
+        st.markdown(f"**Material:** `{batch_details.get('material', 'N/A')}`")
+        st.markdown(f"**Quantity:** `{batch_details.get('quantity', 'N/A')}`")
+
+# Main content - Two columns
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    st.markdown("### 📈 Batch Genealogy Graph")
+    
+    # Build and render graph
+    G, data = build_batch_genealogy_graph()
+    
+    # Adjust highlighting based on trace mode
+    highlight_upstream = show_upstream and (trace_mode in ["Full Genealogy", "Raw Materials Only"])
+    highlight_downstream = show_downstream and (trace_mode in ["Full Genealogy", "Production Flow"])
+    
+    # Render the interactive graph
+    render_genealogy_graph(
+        G, 
+        target_batch_id=selected_batch,
+        highlight_upstream=highlight_upstream,
+        highlight_downstream=highlight_downstream
+    )
+    
+    # Graph interpretation
+    with st.expander("📖 How to read this graph", expanded=False):
+        st.markdown("""
+        **Flow Direction:** Materials flow from left (raw materials) to right (finished products)
         
-        if downstream:
-            for item in downstream:
-                level_indent = "&nbsp;" * (item['level'] * 4)
-                icon = "🔽" if item['level'] == 0 else "↘️" if item['level'] < 0 else "↗️"
-                
-                with st.container():
-                    cols = st.columns([1, 3, 2, 2])
-                    with cols[0]:
-                        st.write(f"{level_indent}{icon}")
-                    with cols[1]:
-                        st.write(f"**{item['batch_id']}**")
-                    with cols[2]:
-                        st.write(item['product'])
-                    with cols[3]:
-                        st.write(item['quantity'])
+        **Node Colors:**
+        - 🔵 **Blue Circles** = Raw Materials (API, Excipients)
+        - 🟣 **Purple Squares** = Intermediate Batches (Blends, Solutions)
+        - 🟢 **Green Stars** = Finished Products (Tablets, Capsules)
+        
+        **Edge Meanings:**
+        - 🔴 **Red Arrows** = Material consumption (Batch A → consumed by → Batch B)
+        - 🔵 **Blue Arrows** = Process sequence (Step 1 → precedes → Step 2)
+        
+        **Interactions:**
+        - Click any node to see details
+        - Drag nodes to rearrange layout
+        - Scroll to zoom in/out
+        """)
+
+with col2:
+    st.markdown("### 📋 Bill of Materials (BOM)")
+    
+    # Get BOM for selected batch
+    bom_df = get_bom_list(selected_batch)
+    
+    if not bom_df.empty:
+        # Display BOM table
+        st.dataframe(
+            bom_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Batch ID": st.column_config.TextColumn(width="medium"),
+                "Material": st.column_config.TextColumn(width="large"),
+                "Quantity": st.column_config.NumberColumn(format="%.2f"),
+                "Unit": st.column_config.TextColumn(width="small"),
+                "Type": st.column_config.TextColumn(width="medium"),
+                "Status": st.column_config.TextColumn(width="small")
+            }
+        )
+        
+        # BOM Summary
+        total_items = len(bom_df)
+        raw_materials = len(bom_df[bom_df["Type"] == "Raw Material"])
+        intermediates = len(bom_df[bom_df["Type"] == "Intermediate"])
+        
+        col_a, col_b, col_c = st.columns(3)
+        with col_a:
+            st.metric("Total Items", total_items)
+        with col_b:
+            st.metric("Raw Materials", raw_materials)
+        with col_c:
+            st.metric("Intermediates", intermediates)
+    else:
+        st.info("No BOM data available for selected batch")
+    
+    st.divider()
+    
+    st.markdown("### 🔄 Material Traceability")
+    
+    # Trace raw material to finished product
+    if selected_batch.startswith("FP-"):
+        st.markdown("**Raw Material Trace:**")
+        
+        # Find all raw materials used in this batch
+        all_raw_materials = []
+        for _, batch in data["batches"].iterrows():
+            if batch["batch_id"].startswith("RM-"):
+                all_raw_materials.append(batch["batch_id"])
+        
+        if all_raw_materials:
+            for rm in all_raw_materials[:3]:  # Show first 3
+                st.markdown(f"- `{rm}` → `{selected_batch}`")
+            
+            if len(all_raw_materials) > 3:
+                with st.expander(f"Show all {len(all_raw_materials)} raw materials"):
+                    for rm in all_raw_materials:
+                        st.markdown(f"- `{rm}`")
         else:
-            st.info("No downstream trace data available")
+            st.info("No raw material trace available")
     
-    # Trace Summary
-    st.markdown("<div class='section-header'>📊 Trace Summary</div>", unsafe_allow_html=True)
+    st.divider()
     
-    total_upstream = len([x for x in upstream if x['level'] != 0])
-    total_downstream = len([x for x in downstream if x['level'] != 0])
+    # Batch details
+    st.markdown("### 📄 Batch Details")
     
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Upstream Batches", total_upstream)
-    with col2:
-        st.metric("Downstream Batches", total_downstream)
-    with col3:
-        st.metric("Total Traceable", total_upstream + total_downstream)
+    batch_info = data["batches"][data["batches"]["batch_id"] == selected_batch]
+    if not batch_info.empty:
+        batch = batch_info.iloc[0]
+        
+        details_col1, details_col2 = st.columns(2)
+        
+        with details_col1:
+            st.markdown(f"**Material:**\n`{batch['material']}`")
+            st.markdown(f"**Quantity:**\n`{batch['quantity']} {batch['unit']}`")
+            if 'product' in batch:
+                st.markdown(f"**Product:**\n`{batch['product']}`")
+        
+        with details_col2:
+            if 'manufacturing_date' in batch:
+                st.markdown(f"**Manufactured:**\n`{batch['manufacturing_date']}`")
+            if 'expiry' in batch:
+                st.markdown(f"**Expiry:**\n`{batch['expiry']}`")
+            if 'quality' in batch:
+                st.markdown(f"**Quality:**\n`{batch['quality']}`")
 
 # Footer
 st.divider()
-st.caption("Pharmaceutical Batch Genealogy System v1.0 | Data is simulated for demonstration purposes")
+st.markdown("""
+<div style="text-align: center; color: #7f8c8d; padding: 20px;">
+    <p><b>Pharmaceutical Batch Genealogy System</b> | Version 1.0 | For Manufacturing Execution Systems (MES)</p>
+    <p style="font-size: 0.9em;">Track material flow from raw materials to finished products with full traceability</p>
+</div>
+""", unsafe_allow_html=True)
