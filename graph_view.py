@@ -7,7 +7,7 @@ import json
 
 def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
     """
-    Render a static batch genealogy graph with trace modes
+    Render a professional pharmaceutical batch genealogy graph
     
     Args:
         G: NetworkX graph
@@ -15,168 +15,87 @@ def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
         trace_mode: "none", "forward", "backward", "both"
     """
     
-    # Create network
+    # Create network with pharma professional theme
     net = Network(
-        height="750px",
+        height="800px",
         width="100%",
         directed=True,
-        bgcolor="#f8f9fa",
-        font_color="#2d3436"
+        bgcolor="#ffffff",
+        font_color="#1a3c6e"
     )
     
-    # DISABLE PHYSICS - Static graph
+    # DISABLE PHYSICS - Static professional layout
     net.toggle_physics(False)
     
-    # Determine which nodes/edges to highlight based on trace mode
-    highlight_nodes = set()
-    highlight_edges = set()
+    # Determine trace highlighting
+    highlight_nodes, highlight_edges = calculate_trace_highlights(G, target_batch_id, trace_mode)
     
-    if target_batch_id and target_batch_id in G.nodes:
-        highlight_nodes.add(target_batch_id)
-        
-        if trace_mode in ["forward", "both"]:
-            # Find all descendants (forward trace)
-            descendants = nx.descendants(G, target_batch_id)
-            highlight_nodes.update(descendants)
-            
-            # Highlight edges in forward direction
-            for desc in descendants:
-                if nx.has_path(G, target_batch_id, desc):
-                    path = nx.shortest_path(G, target_batch_id, desc)
-                    for i in range(len(path) - 1):
-                        highlight_edges.add((path[i], path[i + 1]))
-        
-        if trace_mode in ["backward", "both"]:
-            # Find all ancestors (backward trace)
-            ancestors = nx.ancestors(G, target_batch_id)
-            highlight_nodes.update(ancestors)
-            
-            # Highlight edges in backward direction
-            for anc in ancestors:
-                if nx.has_path(G, anc, target_batch_id):
-                    path = nx.shortest_path(G, anc, target_batch_id)
-                    for i in range(len(path) - 1):
-                        highlight_edges.add((path[i], path[i + 1]))
+    # Calculate professional hierarchical positions
+    positions = calculate_pharma_positions(G, target_batch_id)
     
-    # Calculate hierarchical positions
-    positions = calculate_hierarchical_positions(G, target_batch_id)
-    
-    # === ADD NODES ===
+    # === ADD PHARMA-STYLED NODES ===
     for node_id, node_data in G.nodes(data=True):
-        # Determine styling
-        is_highlighted = node_id in highlight_nodes
-        is_target = node_id == target_batch_id
-        
-        # Colors based on node type
-        color_map = {
-            "Raw Material": "#3498db",
-            "Intermediate": "#9b59b6", 
-            "Finished Product": "#2ecc71"
-        }
-        
-        # Shapes based on node type
-        shape_map = {
-            "Raw Material": "ellipse",
-            "Intermediate": "box",
-            "Finished Product": "star"
-        }
-        
-        node_type = node_data.get("type", "Unknown")
-        color = color_map.get(node_type, "#95a5a6")
-        shape = shape_map.get(node_type, "circle")
-        size = 25 if node_type == "Intermediate" else 30
-        
-        # Special styling for highlighted/target nodes
-        if is_target:
-            color = "#f39c12"  # Orange for target
-            shape = "diamond"
-            size = 40
-            border_width = 4
-            shadow = True
-        elif is_highlighted:
-            border_width = 3
-            shadow = True
-        else:
-            border_width = 2
-            shadow = False
+        # Get pharma-specific styling
+        styling = get_pharma_node_styling(node_data, node_id, target_batch_id, node_id in highlight_nodes)
         
         # Get position
         pos = positions.get(node_id, {"x": None, "y": None})
         
-        # Add node
+        # Add node with pharma styling
         net.add_node(
             node_id,
-            label=node_data.get("label", node_id),
-            color=color,
-            shape=shape,
-            size=size,
-            title=generate_enhanced_tooltip(node_data),
-            borderWidth=border_width,
-            borderColor="#2c3e50",
+            label=styling["label"],
+            color=styling["color"],
+            shape=styling["shape"],
+            size=styling["size"],
+            title=generate_pharma_tooltip(node_data),
+            borderWidth=styling["border_width"],
+            borderColor=styling["border_color"],
             x=pos["x"],
             y=pos["y"],
             fixed=True,
             physics=False,
-            shadow=shadow,
+            shadow=styling["shadow"],
             font={
-                "size": 14 if is_highlighted else 12,
-                "face": "Arial",
-                "color": "#2d3436" if is_highlighted else "#7f8c8d",
+                "size": styling["font_size"],
+                "face": "Arial, sans-serif",
+                "color": styling["font_color"],
                 "align": "center",
-                "bold": is_highlighted
-            }
+                "bold": styling["bold"]
+            },
+            image=styling.get("image"),  # For icon nodes
+            brokenImage=None
         )
     
-    # === ADD EDGES ===
+    # === ADD PHARMA-STYLED EDGES ===
     for u, v, edge_data in G.edges(data=True):
-        is_highlighted = (u, v) in highlight_edges
-        is_target_edge = (u == target_batch_id or v == target_batch_id)
+        edge_styling = get_pharma_edge_styling(u, v, edge_data, highlight_edges, target_batch_id)
         
-        # Edge styling
-        if is_highlighted:
-            color = "#e74c3c"  # Red for highlighted trace
-            width = 4
-            opacity = 1.0
-            dashes = False
-        elif is_target_edge:
-            color = "#f39c12"  # Orange for target-related
-            width = 3
-            opacity = 0.9
-            dashes = [5, 5]
-        else:
-            color = "#bdc3c7"  # Gray for normal
-            width = 2
-            opacity = 0.6
-            dashes = False
-        
-        # Add edge
         net.add_edge(
             u, v,
-            label=edge_data.get("label", ""),
-            color=color,
-            width=width,
-            arrows="to",
-            opacity=opacity,
-            dashes=dashes,
+            label=edge_styling["label"],
+            color=edge_styling["color"],
+            width=edge_styling["width"],
+            arrows=edge_styling["arrows"],
+            opacity=edge_styling["opacity"],
+            dashes=edge_styling["dashes"],
             smooth=False,
-            font={
-                "size": 11,
-                "color": color,
-                "align": "middle"
-            }
+            font=edge_styling["font"],
+            length=edge_styling["length"]
         )
     
-    # === CONFIGURATION ===
+    # === PHARMA PROFESSIONAL CONFIGURATION ===
     config = {
         "physics": {"enabled": False},
         "interaction": {
-            "dragNodes": False,
+            "dragNodes": True,  # Allow repositioning for clarity
             "dragView": True,
             "zoomView": True,
             "hover": True,
-            "tooltipDelay": 150,
+            "tooltipDelay": 100,
             "multiselect": False,
-            "navigationButtons": True
+            "navigationButtons": True,
+            "keyboard": {"enabled": False}
         },
         "edges": {
             "smooth": {"enabled": False},
@@ -187,14 +106,25 @@ def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
                     "type": "arrow"
                 }
             },
-            "color": {"inherit": False}
+            "color": {"inherit": False},
+            "shadow": False
         },
         "nodes": {
             "borderWidth": 2,
             "font": {"align": "center"},
-            "shadow": {"enabled": True}
+            "shadow": {"enabled": True, "color": "rgba(0,0,0,0.1)", "size": 5},
+            "scaling": {
+                "min": 20,
+                "max": 50,
+                "label": {"enabled": True}
+            }
         },
-        "layout": {"hierarchical": {"enabled": False}}
+        "layout": {
+            "improvedLayout": False,
+            "hierarchical": {
+                "enabled": False
+            }
+        }
     }
     
     net.set_options(json.dumps(config))
@@ -207,109 +137,357 @@ def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
     with open(tmp_path, 'r', encoding='utf-8') as f:
         html_content = f.read()
     
-    # Add enhanced legend with trace info
-    legend_html = generate_enhanced_legend_html(target_batch_id, trace_mode, highlight_nodes)
+    # Add pharma professional legend
+    legend_html = generate_pharma_legend(target_batch_id, trace_mode, highlight_nodes)
     html_content = html_content.replace('</body>', f'{legend_html}</body>')
     
     with open(tmp_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
     
     with open(tmp_path, 'r', encoding='utf-8') as f:
-        components.html(f.read(), height=800, scrolling=False)
+        components.html(f.read(), height=850, scrolling=False)
     
     os.unlink(tmp_path)
 
-def calculate_hierarchical_positions(G, target_batch_id=None):
-    """Calculate positions for hierarchical layout"""
+def calculate_trace_highlights(G, target_batch_id, trace_mode):
+    """Calculate which nodes/edges to highlight based on trace mode"""
+    highlight_nodes = set()
+    highlight_edges = set()
+    
+    if target_batch_id and target_batch_id in G.nodes:
+        highlight_nodes.add(target_batch_id)
+        
+        if trace_mode in ["forward", "both"]:
+            descendants = nx.descendants(G, target_batch_id)
+            highlight_nodes.update(descendants)
+            
+            for desc in descendants:
+                if nx.has_path(G, target_batch_id, desc):
+                    path = nx.shortest_path(G, target_batch_id, desc)
+                    for i in range(len(path) - 1):
+                        highlight_edges.add((path[i], path[i + 1]))
+        
+        if trace_mode in ["backward", "both"]:
+            ancestors = nx.ancestors(G, target_batch_id)
+            highlight_nodes.update(ancestors)
+            
+            for anc in ancestors:
+                if nx.has_path(G, anc, target_batch_id):
+                    path = nx.shortest_path(G, anc, target_batch_id)
+                    for i in range(len(path) - 1):
+                        highlight_edges.add((path[i], path[i + 1]))
+    
+    return highlight_nodes, highlight_edges
+
+def calculate_pharma_positions(G, target_batch_id=None):
+    """Calculate positions for pharma process flow layout"""
     positions = {}
     
-    # Group nodes by type and connectivity
-    raw_materials = []
-    intermediates = []
-    finished_products = []
+    # Group by pharmaceutical process stage
+    raw_materials = [n for n in G.nodes() if G.nodes[n].get("type") == "Raw Material"]
+    apis = [n for n in raw_materials if "API" in str(G.nodes[n].get("material", "")).upper()]
+    excipients = [n for n in raw_materials if n not in apis]
     
-    for node in G.nodes():
-        node_type = G.nodes[node].get("type", "Unknown")
-        
-        if node_type == "Raw Material":
-            raw_materials.append(node)
-        elif node_type == "Intermediate":
-            intermediates.append(node)
-        elif node_type == "Finished Product":
-            finished_products.append(node)
-        else:
-            intermediates.append(node)  # Default
+    intermediates = [n for n in G.nodes() if G.nodes[n].get("type") == "Intermediate"]
+    blends = [n for n in intermediates if "BLEND" in str(G.nodes[n].get("material", "")).upper()]
+    solutions = [n for n in intermediates if n not in blends]
     
-    # Position in columns
-    column_x = {"raw": 100, "intermediate": 450, "finished": 800}
+    finished_products = [n for n in G.nodes() if G.nodes[n].get("type") == "Finished Product"]
+    tablets = [n for n in finished_products if "TAB" in str(n).upper()]
+    capsules = [n for n in finished_products if "CAP" in str(n).upper()]
+    others = [n for n in finished_products if n not in tablets and n not in capsules]
     
-    # Position raw materials (left)
-    y = 100
-    for node in raw_materials[:8]:  # Limit to 8 per column
-        positions[node] = {"x": column_x["raw"], "y": y}
-        y += 120
+    # Pharmaceutical Process Flow Columns
+    columns = {
+        "API": {"x": 100, "nodes": apis},
+        "Excipients": {"x": 250, "nodes": excipients},
+        "Blending": {"x": 450, "nodes": blends},
+        "Solutions": {"x": 600, "nodes": solutions},
+        "Tablets": {"x": 800, "nodes": tablets},
+        "Capsules": {"x": 800, "nodes": capsules},
+        "Other Products": {"x": 800, "nodes": others}
+    }
     
-    # Position intermediates (middle)
-    y = 100
-    for node in intermediates[:8]:
-        positions[node] = {"x": column_x["intermediate"], "y": y}
-        y += 120
+    # Position nodes in their process columns
+    for col_name, col_data in columns.items():
+        y = 150
+        for node in col_data["nodes"][:10]:  # Limit per column
+            positions[node] = {"x": col_data["x"], "y": y}
+            y += 120
     
-    # Position finished products (right)
-    y = 100
-    for node in finished_products[:8]:
-        positions[node] = {"x": column_x["finished"], "y": y}
-        y += 120
-    
-    # Position target node prominently if provided
+    # Center target node if provided
     if target_batch_id and target_batch_id in positions:
-        positions[target_batch_id]["y"] = 400  # Center vertically
+        positions[target_batch_id]["y"] = 450
     
     return positions
 
-def generate_enhanced_tooltip(node_data):
-    """Generate detailed HTML tooltip"""
+def get_pharma_node_styling(node_data, node_id, target_batch_id, is_highlighted):
+    """Get pharmaceutical professional styling for nodes"""
+    
+    node_type = node_data.get("type", "Unknown")
+    material = str(node_data.get("material", "")).upper()
+    is_target = node_id == target_batch_id
+    
+    # Pharma Color Scheme
+    pharma_colors = {
+        "Raw Material": {
+            "API": {"color": "#1e88e5", "border": "#0d47a1"},  # Blue for API
+            "Excipient": {"color": "#43a047", "border": "#1b5e20"},  # Green for excipients
+            "Solvent": {"color": "#5e35b1", "border": "#311b92"},  # Purple for solvents
+            "default": {"color": "#78909c", "border": "#37474f"}  # Gray for others
+        },
+        "Intermediate": {
+            "Blend": {"color": "#ff9800", "border": "#e65100"},  # Orange for blends
+            "Solution": {"color": "#00acc1", "border": "#006064"},  # Cyan for solutions
+            "Granulation": {"color": "#8e24aa", "border": "#4a148c"},  # Purple for granulation
+            "default": {"color": "#fb8c00", "border": "#e65100"}
+        },
+        "Finished Product": {
+            "Tablet": {"color": "#00c853", "border": "#1b5e20"},  # Bright green for tablets
+            "Capsule": {"color": "#ff4081", "border": "#c51162"},  Pink for capsules
+            "Injection": {"color": "#2962ff", "border": "#0039cb"},  # Blue for injections
+            "default": {"color": "#00bfa5", "border": "#00796b"}  # Teal for others
+        }
+    }
+    
+    # Determine specific type
+    specific_type = "default"
+    if "API" in material:
+        specific_type = "API"
+    elif any(x in material for x in ["EXCIPIENT", "FILLER", "BINDER"]):
+        specific_type = "Excipient"
+    elif any(x in material for x in ["SOLVENT", "WATER"]):
+        specific_type = "Solvent"
+    elif "BLEND" in material:
+        specific_type = "Blend"
+    elif "SOLUTION" in material:
+        specific_type = "Solution"
+    elif "TABLET" in material or "TAB" in node_id:
+        specific_type = "Tablet"
+    elif "CAPSULE" in material or "CAP" in node_id:
+        specific_type = "Capsule"
+    
+    # Get colors
+    color_info = pharma_colors.get(node_type, {}).get(specific_type, pharma_colors.get(node_type, {}).get("default", {"color": "#607d8b", "border": "#37474f"}))
+    
+    # Shapes based on pharmaceutical item
+    shape_map = {
+        "Raw Material": "ellipse",
+        "Intermediate": "box",
+        "Finished Product": "star",
+        "API": "diamond",
+        "Tablet": "hexagon",
+        "Capsule": "ellipse"
+    }
+    
+    shape = shape_map.get(specific_type, shape_map.get(node_type, "circle"))
+    
+    # Sizes
+    if is_target:
+        size = 45
+        border_width = 4
+        font_size = 16
+        font_color = "#d84315"  # Deep orange for target
+        bold = True
+        shadow = True
+    elif is_highlighted:
+        size = 35
+        border_width = 3
+        font_size = 14
+        font_color = color_info["border"]
+        bold = True
+        shadow = True
+    else:
+        size = 28 if node_type == "Finished Product" else 25 if node_type == "Intermediate" else 22
+        border_width = 2
+        font_size = 12
+        font_color = "#455a64"
+        bold = False
+        shadow = False
+    
+    # Create label with pharmaceutical abbreviations
+    label = format_pharma_label(node_id, node_data.get("material", ""))
+    
+    return {
+        "label": label,
+        "color": color_info["color"],
+        "border_color": color_info["border"],
+        "shape": shape,
+        "size": size,
+        "border_width": border_width,
+        "font_size": font_size,
+        "font_color": font_color,
+        "bold": bold,
+        "shadow": shadow
+    }
+
+def format_pharma_label(batch_id, material):
+    """Format pharmaceutical labels professionally"""
+    # Shorten material name
+    material_words = str(material).split()
+    if len(material_words) > 3:
+        material_short = ' '.join(material_words[:3]) + '...'
+    else:
+        material_short = str(material)
+    
+    # Use batch ID abbreviation
+    if batch_id.startswith("RM-"):
+        prefix = "RM"
+    elif batch_id.startswith("INT-"):
+        prefix = "INT"
+    elif batch_id.startswith("FP-"):
+        prefix = "FP"
+    else:
+        prefix = batch_id.split('-')[0] if '-' in batch_id else batch_id[:4]
+    
+    # Get numeric part
+    import re
+    numbers = re.findall(r'\d+', batch_id)
+    number_part = numbers[0] if numbers else ""
+    
+    return f"{prefix}-{number_part}\n{material_short[:15]}"
+
+def get_pharma_edge_styling(u, v, edge_data, highlight_edges, target_batch_id):
+    """Get pharmaceutical professional styling for edges"""
+    is_highlighted = (u, v) in highlight_edges
+    is_target_edge = (u == target_batch_id or v == target_batch_id)
+    relationship = str(edge_data.get("relationship", ""))
+    
+    # Pharma edge styling
+    if is_highlighted:
+        color = "#d32f2f"  # Red for critical trace
+        width = 4
+        opacity = 1.0
+        dashes = False
+        font_color = "#d32f2f"
+    elif is_target_edge:
+        color = "#ff9800"  # Orange for target-related
+        width = 3
+        opacity = 0.9
+        dashes = [5, 5]
+        font_color = "#ff9800"
+    elif relationship == "consumed_by":
+        color = "#78909c"  # Gray for consumption
+        width = 2
+        opacity = 0.7
+        dashes = False
+        font_color = "#546e7a"
+    elif relationship == "produces":
+        color = "#4caf50"  # Green for production
+        width = 2
+        opacity = 0.7
+        dashes = [10, 5]
+        font_color = "#2e7d32"
+    else:
+        color = "#b0bec5"  # Light gray for others
+        width = 1
+        opacity = 0.5
+        dashes = True
+        font_color = "#78909c"
+    
+    # Format edge label professionally
+    label = format_edge_label(edge_data)
+    
+    return {
+        "label": label,
+        "color": color,
+        "width": width,
+        "arrows": "to",
+        "opacity": opacity,
+        "dashes": dashes,
+        "font": {
+            "size": 11,
+            "color": font_color,
+            "align": "middle",
+            "strokeWidth": 0
+        },
+        "length": 150
+    }
+
+def format_edge_label(edge_data):
+    """Format edge labels professionally"""
+    relationship = str(edge_data.get("relationship", ""))
+    quantity = edge_data.get("quantity")
+    unit = edge_data.get("unit", "")
+    
+    # Professional relationship names
+    rel_map = {
+        "consumed_by": "Consumes",
+        "produces": "Produces",
+        "precedes": "Precedes",
+        "coated_with": "Coated With",
+        "mixed_with": "Mixed With"
+    }
+    
+    display_rel = rel_map.get(relationship, relationship.replace("_", " ").title())
+    
+    if quantity:
+        # Format quantity professionally
+        if isinstance(quantity, (int, float)):
+            if quantity >= 1000:
+                formatted_qty = f"{quantity/1000:.1f}k"
+            else:
+                formatted_qty = str(int(quantity))
+            return f"{display_rel}\n{formatted_qty} {unit}"
+    
+    return display_rel
+
+def generate_pharma_tooltip(node_data):
+    """Generate professional pharmaceutical tooltip"""
     tooltip = f"""
-    <div style="padding: 12px; font-family: 'Segoe UI', Arial, sans-serif; max-width: 320px; background: white; border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); border-left: 4px solid {node_data.get('color', '#3498db')};">
-        <div style="font-weight: 700; font-size: 15px; margin-bottom: 10px; color: #2c3e50;">
-            {node_data.get('label', 'Unknown').split('\\n')[0]}
+    <div style="padding: 12px; font-family: 'Arial', sans-serif; max-width: 350px; background: white; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.15); border-left: 4px solid {node_data.get('color', '#1e88e5')};">
+        <div style="font-weight: 700; font-size: 14px; margin-bottom: 8px; color: #1a237e; border-bottom: 2px solid #e8eaf6; padding-bottom: 6px;">
+            🏭 {node_data.get('label', 'Pharma Batch').split('\\n')[0]}
         </div>
         
-        <div style="display: grid; grid-template-columns: 100px auto; gap: 6px; font-size: 12.5px;">
+        <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
     """
     
+    # Pharma-specific fields in order of importance
     fields = [
-        ("Type", node_data.get("type"), ""),
-        ("Material", node_data.get("material"), ""),
-        ("Product", node_data.get("product"), ""),
-        ("Quantity", node_data.get("quantity"), ""),
-        ("Status", node_data.get("status"), "#2ecc71" if node_data.get("status") == "Released" else "#f39c12"),
-        ("Quality", node_data.get("quality"), "#2ecc71" if node_data.get("quality") == "Approved" else "#e74c3c"),
-        ("Batch ID", node_data.get("batch_id", list(node_data.keys())[0] if node_data else ""), "")
+        ("📦 Material", node_data.get("material"), "#1a3c6e"),
+        ("🏷️ Type", node_data.get("type"), "#1e88e5"),
+        ("⚖️ Quantity", node_data.get("quantity"), "#43a047"),
+        ("💊 Product", node_data.get("product"), "#8e24aa"),
+        ("📊 Status", node_data.get("status"), "#fb8c00"),
+        ("✅ Quality", node_data.get("quality"), "#00acc1"),
+        ("🔢 Batch ID", node_data.get("batch_id"), "#546e7a")
     ]
     
-    for label, value, color in fields:
-        if value:
-            color_style = f"color: {color};" if color else "color: #2c3e50; font-weight: 500;"
+    for icon, label, value, color in fields:
+        if value and str(value).strip() and str(value).lower() != "nan":
             tooltip += f"""
-            <div style="color: #7f8c8d; font-weight: 500;">{label}:</div>
-            <div style="{color_style}">{value}</div>
+            <tr>
+                <td style="padding: 4px 0; color: #546e7a; font-weight: 500; width: 40%;">{icon} {label}:</td>
+                <td style="padding: 4px 0; color: {color}; font-weight: 600; text-align: right;">{value}</td>
+            </tr>
             """
     
     tooltip += """
+        </table>
+        
+        <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #f5f5f5; font-size: 11px; color: #78909c;">
+            <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                <span style="margin-right: 6px;">•</span>
+                <span>GMP Batch Record Reference</span>
+            </div>
+            <div style="display: flex; align-items: center;">
+                <span style="margin-right: 6px;">•</span>
+                <span>Pharmaceutical Traceability</span>
+            </div>
         </div>
     </div>
     """
     return tooltip
 
-def generate_enhanced_legend_html(target_batch_id, trace_mode, highlight_nodes):
-    """Generate legend with trace information"""
+def generate_pharma_legend(target_batch_id, trace_mode, highlight_nodes):
+    """Generate pharmaceutical professional legend"""
     
-    trace_info = {
-        "none": "No trace active",
-        "forward": "Showing downstream products",
-        "backward": "Showing upstream materials", 
-        "both": "Showing full genealogy"
+    trace_descriptions = {
+        "none": "Full material flow view",
+        "forward": "Downstream product trace",
+        "backward": "Upstream material trace",
+        "both": "Complete genealogy trace"
     }
     
     highlight_count = len(highlight_nodes) if highlight_nodes else 0
@@ -319,84 +497,103 @@ def generate_enhanced_legend_html(target_batch_id, trace_mode, highlight_nodes):
         position: absolute;
         top: 20px;
         right: 20px;
-        padding: 18px;
-        font-family: 'Segoe UI', Arial, sans-serif;
-        font-size: 13px;
-        background: linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(248,249,250,0.98) 100%);
+        padding: 20px;
+        font-family: 'Arial', 'Segoe UI', sans-serif;
+        font-size: 12.5px;
+        background: linear-gradient(135deg, rgba(255,255,255,0.98) 0%, rgba(250,251,252,0.98) 100%);
         border-radius: 12px;
-        border: 1px solid #dfe6e9;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+        border: 1px solid #e1e8ed;
+        box-shadow: 0 8px 32px rgba(26, 60, 110, 0.12);
         z-index: 1000;
         max-width: 280px;
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
     ">
-        <div style="display: flex; align-items: center; margin-bottom: 15px; padding-bottom: 12px; border-bottom: 2px solid #3498db;">
-            <div style="font-size: 18px; margin-right: 10px;">🏭</div>
+        <div style="display: flex; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid #1e88e5;">
+            <div style="font-size: 20px; margin-right: 10px; color: #1e88e5;">💊</div>
             <div>
-                <div style="font-weight: 700; font-size: 16px; color: #2c3e50;">Batch Genealogy</div>
-                <div style="font-size: 11px; color: #7f8c8d; margin-top: 2px;">Trace Visualization</div>
+                <div style="font-weight: 800; font-size: 15px; color: #1a3c6e; letter-spacing: 0.5px;">PHARMA GENEALOGY</div>
+                <div style="font-size: 11px; color: #5d7fa3; margin-top: 2px;">Material Traceability System</div>
             </div>
         </div>
         
-        {f'<div style="background: #fff3cd; padding: 10px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #ffc107;"><div style="font-weight: 600; color: #856404;">Target Batch: <code>{target_batch_id}</code></div><div style="font-size: 12px; color: #856404; margin-top: 4px;">{trace_info.get(trace_mode, "")} • {highlight_count} nodes highlighted</div></div>' if target_batch_id else ''}
+        {f'<div style="background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%); padding: 12px; border-radius: 8px; margin-bottom: 16px; border-left: 4px solid #1e88e5;"><div style="font-weight: 700; color: #0d47a1; font-size: 13px;">🧬 TARGET BATCH</div><div style="font-family: monospace; background: white; padding: 6px; border-radius: 4px; margin-top: 6px; border: 1px solid #bbdefb;"><code style="color: #1a3c6e;">{target_batch_id}</code></div><div style="font-size: 11px; color: #1565c0; margin-top: 6px;">{trace_descriptions.get(trace_mode, "")} • {highlight_count} batches in trace</div></div>' if target_batch_id else ''}
         
-        <div style="margin-bottom: 15px;">
-            <div style="font-weight: 600; color: #495057; font-size: 12.5px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Node Types</div>
-            <div style="display: flex; align-items: center; margin-bottom: 8px; padding: 8px 10px; background: rgba(52, 152, 219, 0.08); border-radius: 6px;">
-                <div style="width: 14px; height: 14px; background: #3498db; border-radius: 50%; margin-right: 10px; border: 2px solid #2980b9;"></div>
-                <span style="font-weight: 500;">Raw Material</span>
-            </div>
-            <div style="display: flex; align-items: center; margin-bottom: 8px; padding: 8px 10px; background: rgba(155, 89, 182, 0.08); border-radius: 6px;">
-                <div style="width: 14px; height: 14px; background: #9b59b6; border-radius: 3px; margin-right: 10px; border: 2px solid #8e44ad;"></div>
-                <span style="font-weight: 500;">Intermediate</span>
-            </div>
-            <div style="display: flex; align-items: center; margin-bottom: 8px; padding: 8px 10px; background: rgba(46, 204, 113, 0.08); border-radius: 6px;">
-                <div style="width: 14px; height: 14px; background: #2ecc71; border-radius: 0 50% 50% 50%; transform: rotate(45deg); margin-right: 10px; border: 2px solid #27ae60;"></div>
-                <span style="font-weight: 500;">Finished Product</span>
-            </div>
-            <div style="display: flex; align-items: center; padding: 8px 10px; background: rgba(243, 156, 18, 0.08); border-radius: 6px;">
-                <div style="width: 14px; height: 14px; background: #f39c12; border-radius: 0; transform: rotate(45deg); margin-right: 10px; border: 2px solid #d68910;"></div>
-                <span style="font-weight: 500;">Target Batch</span>
+        <div style="margin-bottom: 16px;">
+            <div style="font-weight: 700; color: #37474f; font-size: 12px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">🧪 BATCH TYPES</div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div style="background: rgba(30, 136, 229, 0.08); padding: 8px; border-radius: 6px; border: 1px solid rgba(30, 136, 229, 0.2);">
+                    <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                        <div style="width: 10px; height: 10px; background: #1e88e5; border-radius: 50%; margin-right: 6px;"></div>
+                        <span style="font-weight: 600; font-size: 11px;">API</span>
+                    </div>
+                    <div style="font-size: 10px; color: #5d7fa3;">Active Ingredient</div>
+                </div>
+                
+                <div style="background: rgba(67, 160, 71, 0.08); padding: 8px; border-radius: 6px; border: 1px solid rgba(67, 160, 71, 0.2);">
+                    <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                        <div style="width: 10px; height: 10px; background: #43a047; border-radius: 50%; margin-right: 6px;"></div>
+                        <span style="font-weight: 600; font-size: 11px;">Excipient</span>
+                    </div>
+                    <div style="font-size: 10px; color: #5d7fa3;">Inactive Ingredient</div>
+                </div>
+                
+                <div style="background: rgba(255, 152, 0, 0.08); padding: 8px; border-radius: 6px; border: 1px solid rgba(255, 152, 0, 0.2);">
+                    <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                        <div style="width: 10px; height: 10px; background: #ff9800; border: 1px solid #e65100; margin-right: 6px;"></div>
+                        <span style="font-weight: 600; font-size: 11px;">Blend</span>
+                    </div>
+                    <div style="font-size: 10px; color: #5d7fa3;">Intermediate Mix</div>
+                </div>
+                
+                <div style="background: rgba(0, 200, 83, 0.08); padding: 8px; border-radius: 6px; border: 1px solid rgba(0, 200, 83, 0.2);">
+                    <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                        <div style="width: 10px; height: 10px; background: #00c853; border-radius: 0 50% 50% 50%; transform: rotate(45deg); margin-right: 6px;"></div>
+                        <span style="font-weight: 600; font-size: 11px;">Tablet</span>
+                    </div>
+                    <div style="font-size: 10px; color: #5d7fa3;">Final Product</div>
+                </div>
             </div>
         </div>
         
-        <div style="margin-bottom: 15px;">
-            <div style="font-weight: 600; color: #495057; font-size: 12.5px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Trace Colors</div>
-            <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                <div style="width: 24px; height: 3px; background: #e74c3c; margin-right: 10px; position: relative;">
-                    <div style="position: absolute; right: -6px; top: -4px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #e74c3c;"></div>
+        <div style="margin-bottom: 16px;">
+            <div style="font-weight: 700; color: #37474f; font-size: 12px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">🔗 TRACE VISUALIZATION</div>
+            
+            <div style="display: flex; align-items: center; margin-bottom: 8px; padding: 8px; background: #fff8e1; border-radius: 6px; border-left: 3px solid #ffd54f;">
+                <div style="width: 20px; height: 3px; background: #d32f2f; margin-right: 10px;"></div>
+                <div>
+                    <div style="font-weight: 600; font-size: 11.5px; color: #d32f2f;">Active Trace Path</div>
+                    <div style="font-size: 10px; color: #5d7fa3;">Current material flow in focus</div>
                 </div>
-                <span style="font-size: 12.5px;"><b>Highlighted Trace</b> (Active path)</span>
             </div>
-            <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                <div style="width: 24px; height: 2px; background: #f39c12; margin-right: 10px; position: relative;">
-                    <div style="position: absolute; right: -6px; top: -4px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #f39c12;"></div>
+            
+            <div style="display: flex; align-items: center; margin-bottom: 8px; padding: 8px; background: #f3e5f5; border-radius: 6px; border-left: 3px solid #ba68c8;">
+                <div style="width: 20px; height: 2px; background: #8e24aa; margin-right: 10px;"></div>
+                <div>
+                    <div style="font-weight: 600; font-size: 11.5px; color: #8e24aa;">Production Flow</div>
+                    <div style="font-size: 10px; color: #5d7fa3;">Manufacturing process steps</div>
                 </div>
-                <span style="font-size: 12.5px;">Related to Target</span>
-            </div>
-            <div style="display: flex; align-items: center;">
-                <div style="width: 24px; height: 1px; background: #bdc3c7; margin-right: 10px; position: relative;">
-                    <div style="position: absolute; right: -6px; top: -4px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #bdc3c7;"></div>
-                </div>
-                <span style="font-size: 12.5px;">Normal Connection</span>
             </div>
         </div>
         
-        <div style="margin-top: 15px; padding-top: 12px; border-top: 1px solid #e9ecef;">
-            <div style="font-size: 12px; color: #6c757d; line-height: 1.5;">
-                <div style="display: flex; align-items: flex-start; margin-bottom: 5px;">
-                    <span style="margin-right: 8px; color: #3498db;">•</span>
-                    <span><b>Hover</b> over nodes for full details</span>
+        <div style="padding-top: 12px; border-top: 1px solid #eceff1;">
+            <div style="font-size: 11px; color: #5d7fa3; line-height: 1.5;">
+                <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                    <span style="margin-right: 6px; color: #1e88e5;">•</span>
+                    <span><b>Hover</b> for batch details (GMP records)</span>
                 </div>
-                <div style="display: flex; align-items: flex-start; margin-bottom: 5px;">
-                    <span style="margin-right: 8px; color: #3498db;">•</span>
-                    <span><b>Scroll</b> to zoom • <b>Drag</b> to pan</span>
+                <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                    <span style="margin-right: 6px; color: #1e88e5;">•</span>
+                    <span><b>Drag</b> to reposition for clarity</span>
                 </div>
-                <div style="display: flex; align-items: flex-start;">
-                    <span style="margin-right: 8px; color: #3498db;">•</span>
-                    <span><b>Static layout</b> • No distracting movement</span>
+                <div style="display: flex; align-items: center;">
+                    <span style="margin-right: 6px; color: #1e88e5;">•</span>
+                    <span><b>Scroll</b> to zoom • For audit trails</span>
                 </div>
+            </div>
+            <div style="margin-top: 10px; font-size: 10px; color: #90a4ae; text-align: center; font-style: italic;">
+                Pharmaceutical Grade Visualization
             </div>
         </div>
     </div>
