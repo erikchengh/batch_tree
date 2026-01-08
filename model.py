@@ -96,21 +96,26 @@ def get_bom_list(batch_id):
     
     sample_boms = {
         "FP-TAB-001": [
-            {"material": "Paracetamol API", "batch_id": "RM-API-001", "quantity": 50, "unit": "kg", "type": "Raw Material"},
-            {"material": "Microcrystalline Cellulose", "batch_id": "RM-EXC-001", "quantity": 40, "unit": "kg", "type": "Raw Material"},
-            {"material": "Croscarmellose Sodium", "batch_id": "RM-EXC-002", "quantity": 10, "unit": "kg", "type": "Raw Material"},
-            {"material": "Magnesium Stearate", "batch_id": "RM-EXC-003", "quantity": 1, "unit": "kg", "type": "Raw Material"},
+            {"material": "Paracetamol API", "batch_id": "RM-API-001", "quantity": 50, "unit": "kg", "type": "Raw Material", "status": "Approved"},
+            {"material": "Microcrystalline Cellulose", "batch_id": "RM-EXC-001", "quantity": 40, "unit": "kg", "type": "Raw Material", "status": "Approved"},
+            {"material": "Croscarmellose Sodium", "batch_id": "RM-EXC-002", "quantity": 10, "unit": "kg", "type": "Raw Material", "status": "Approved"},
+            {"material": "Magnesium Stearate", "batch_id": "RM-EXC-003", "quantity": 1, "unit": "kg", "type": "Raw Material", "status": "Approved"},
+            {"material": "Purified Water", "batch_id": "RM-SOL-001", "quantity": 20, "unit": "L", "type": "Raw Material", "status": "Approved"},
         ],
         "FP-TAB-002": [
-            {"material": "Paracetamol API", "batch_id": "RM-API-001", "quantity": 75, "unit": "kg", "type": "Raw Material"},
-            {"material": "Microcrystalline Cellulose", "batch_id": "RM-EXC-001", "quantity": 60, "unit": "kg", "type": "Raw Material"},
-            {"material": "Croscarmellose Sodium", "batch_id": "RM-EXC-002", "quantity": 15, "unit": "kg", "type": "Raw Material"},
-            {"material": "Magnesium Stearate", "batch_id": "RM-EXC-003", "quantity": 1.5, "unit": "kg", "type": "Raw Material"},
+            {"material": "Paracetamol API", "batch_id": "RM-API-001", "quantity": 75, "unit": "kg", "type": "Raw Material", "status": "Approved"},
+            {"material": "Microcrystalline Cellulose", "batch_id": "RM-EXC-001", "quantity": 60, "unit": "kg", "type": "Raw Material", "status": "Approved"},
+            {"material": "Croscarmellose Sodium", "batch_id": "RM-EXC-002", "quantity": 15, "unit": "kg", "type": "Raw Material", "status": "Approved"},
+            {"material": "Magnesium Stearate", "batch_id": "RM-EXC-003", "quantity": 1.5, "unit": "kg", "type": "Raw Material", "status": "Approved"},
         ],
         "FP-TAB-003": [
-            {"material": "Amoxicillin API", "batch_id": "RM-API-002", "quantity": 40, "unit": "kg", "type": "Raw Material"},
-            {"material": "Microcrystalline Cellulose", "batch_id": "RM-EXC-001", "quantity": 35, "unit": "kg", "type": "Raw Material"},
-            {"material": "Croscarmellose Sodium", "batch_id": "RM-EXC-002", "quantity": 7.5, "unit": "kg", "type": "Raw Material"},
+            {"material": "Amoxicillin API", "batch_id": "RM-API-002", "quantity": 40, "unit": "kg", "type": "Raw Material", "status": "Approved"},
+            {"material": "Microcrystalline Cellulose", "batch_id": "RM-EXC-001", "quantity": 35, "unit": "kg", "type": "Raw Material", "status": "Approved"},
+            {"material": "Croscarmellose Sodium", "batch_id": "RM-EXC-002", "quantity": 7.5, "unit": "kg", "type": "Raw Material", "status": "Approved"},
+        ],
+        "FP-CAP-001": [
+            {"material": "Paracetamol API", "batch_id": "RM-API-001", "quantity": 25, "unit": "kg", "type": "Raw Material", "status": "Approved"},
+            {"material": "Microcrystalline Cellulose", "batch_id": "RM-EXC-001", "quantity": 30, "unit": "kg", "type": "Raw Material", "status": "Approved"},
         ]
     }
     
@@ -129,10 +134,12 @@ def get_product_list():
     return pd.DataFrame(products)
 
 def analyze_graph(G):
-    """Analyze graph statistics"""
-    return {
+    """Analyze graph statistics - FIXED VERSION"""
+    stats = {
         "total_nodes": G.number_of_nodes(),
         "total_edges": G.number_of_edges(),
         "raw_materials": len([n for n in G.nodes() if G.nodes[n].get("type") == "Raw Material"]),
         "finished_products": len([n for n in G.nodes() if G.nodes[n].get("type") == "Finished Product"]),
+        "is_connected": nx.is_weakly_connected(G) if G.number_of_nodes() > 0 else False,
     }
+    return stats
