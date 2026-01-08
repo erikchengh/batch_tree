@@ -5,6 +5,10 @@ from data_mock import generate_batch_data
 def build_batch_genealogy_graph():
     """Build a directed graph of batch genealogy relationships"""
     data = generate_batch_data()
+
+    # Enhance with pharma metadata
+    data = enhance_pharma_data(data)
+    
     G = nx.DiGraph()
     
     # Add all batches as nodes
@@ -49,6 +53,9 @@ def build_batch_genealogy_graph():
             label=label,
             type=batch_type,
             material=material,
+            # Add the pharma_class and risk_level to node data:
+            pharma_class=batch.get("pharma_class", ""),
+            risk_level=batch.get("risk_level", ""),
             product=str(batch.get("product", "")),
             quantity=f"{batch.get('quantity', 'N/A')} {batch.get('unit', '')}",
             status=str(batch.get("status", "")),
