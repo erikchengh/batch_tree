@@ -1,214 +1,245 @@
-from pyvis.network import Network
-import streamlit.components.v1 as components
-import networkx as nx
-import json
-
-def render_genealogy_graph(G, selected_batch=None, show_quantities=True, 
-                          highlight_paths=True, legend_position="top-right"):
-    """Render batch genealogy graph showing material flow"""
-    
+def render_graph(G, selected_node=None, deviation_only=False, trace_mode="None"):
     net = Network(
-        height="750px",
-        width="100%",
+        height="700px", 
+        width="100%", 
         directed=True,
         bgcolor="#ffffff",
-        font_color="#2d3436",
-        notebook=False
+        font_color="#2d3436"
     )
     
-    # Configure layout for hierarchical flow
-    net.toggle_physics(True)
-    net.hrepulsion(
-        node_distance=150,
-        central_gravity=0.3,
+    net.toggle_physics(False)
+    net.force_atlas_2based(
+        gravity=-100,
+        central_gravity=0.01,
         spring_length=200,
         spring_strength=0.05,
-        damping=0.09
+        damping=0.4,
+        overlap=0
     )
     
-    # === NODE STYLING based on type and level ===
+    highlight_set = set()
+    if selected_node:
+        if trace_mode == "MaterialGenealogy" and G.nodes[selected_node].get("type") == "Material":
+            highlight_set.add(selected_node)
+            highlight_set.update(nx.ancestors(G, selected_node))
+            highlight_set.update(nx.descendants(G, selected_node))
+        elif trace_mode != "None":
+            highlight_set.add(selected_node)
+            if trace_mode in ["Backward", "Bidirectional"]:
+                highlight_set.update(nx.ancestors(G, selected_node))
+            if trace_mode in ["Forward", "Bidirectional"]:
+                highlight_set.update(nx.descendants(G, selected_node))
+    
     for node_id, data in G.nodes(data=True):
-        # Determine node type and styling
-        node_type = data.get("type", "unknown")
-        level = data.get("level", 0)
+        opacity = 1.0
+        if deviation_only and data.get("result") != "FAIL":
+            opacity = 0.3
+        if highlight_set and node_id not in highlight_set:
+            opacity = 0.3
         
-        # Base styling
-        shape, color, size, border_color = "ellipse", "#95a5a6", 25, "#7f8c8d"
+        shape, size, color, border_color, border_width = "dot", 20, "#3498db", "#2c3e50", 2
         
-        # Color by node type
-        if node_type == "batch":
-            if data.get("product", "").startswith("Tablet"):
-                color, border_color = "#3498db", "#2980b9"  # Blue for tablet batches
-            elif "API" in data.get("product", ""):
-                color, border_color = "#e74c3c", "#c0392b"  # Red for API
-            elif "Excipient" in data.get("product", ""):
-                color, border_color = "#2ecc71", "#27ae60"  # Green for excipients
+        if data["type"] == "Batch":
+            shape, size, color, border_color = "star", 35, "#f39c12", "#d68910"
+        elif data["type"] == "Phase":
+            shape, size, color, border_color = "triangle", 28, "#2ecc71", "#27ae60"
+        elif data["type"] == "PI":
+            if data.get("result") == "FAIL":
+                shape, size, color, border_color = "box", 25, "#e74c3c", "#c0392b"
             else:
-                color, border_color = "#9b59b6", "#8e44ad"  # Purple for other batches
-            shape = "box"
-            
-        elif node_type == "material":
-            material_type = data.get("material_type", "raw")
-            if material_type == "raw":
-                color, border_color = "#f39c12", "#d68910"  # Orange for raw materials
-            elif material_type == "intermediate":
-                color, border_color = "#1abc9c", "#16a085"  # Teal for intermediates
-            elif material_type == "packaging":
-                color, border_color = "#34495e", "#2c3e50"  # Dark gray for packaging
-            shape = "circle"
-            
-        elif node_type == "product":
-            color, border_color = "#9b59b6", "#8e44ad"  # Purple for final products
-            shape = "diamond"
-            size = 30
+                shape, size, color, border_color = "box", 25, "#9b59b6", "#8e44ad"
+        elif data["type"] == "Material":
+            shape, size, color, border_color = "ellipse", 22, "#34495e", "#2c3e50"
         
-        # Size by level (center batch is largest)
-        if level == 0:  # Target batch
-            size = 40
-            shape = "star"
-            border_color = "#f1c40f"
-            border_width = 3
-        elif abs(level) == 1:
-            size = 30
-            border_width = 2
-        else:
-            size = 25
-            border_width = 1
+        if node_id == selected_node:
+            shape, size, color, border_color, border_width = "diamond", 35, "#f1c40f", "#f39c12", 3
         
-        # Highlight selected batch
-        if node_id == selected_batch:
-            color = "#f1c40f"
-            border_color = "#f39c12"
-            border_width = 4
-            size = 45
-            shape = "star"
+        tooltip_lines = [f"<b>{data['label']}</b>", f"Type: {data['type']}"]
+        if data.get("result"):
+            tooltip_lines.append(f"Result: {data['result']}")
+        for k in ["parameters", "limits", "timestamp", "deviation", "product", "status"]:
+            if k in data and data[k]:
+                if isinstance(data[k], dict):
+                    tooltip_lines.append(f"{k}: {json.dumps(data[k], indent=2).replace('\"', '')}")
+                else:
+                    tooltip_lines.append(f"{k}: {data[k]}")
+        tooltip_html = "<br>".join(tooltip_lines)
         
-        # Build label with quantity
-        label = data.get("label", node_id)
-        if show_quantities and data.get("quantity"):
-            label = f"{label}\n{data['quantity']}"
-        
-        # Build tooltip
-        tooltip = [f"<b>{data.get('label', node_id)}</b>"]
-        if data.get("type"):
-            tooltip.append(f"Type: {data['type']}")
-        if data.get("status"):
-            tooltip.append(f"Status: {data['status']}")
-        if data.get("quantity"):
-            tooltip.append(f"Quantity: {data['quantity']}")
-        if data.get("date"):
-            tooltip.append(f"Date: {data['date']}")
-        if data.get("lot"):
-            tooltip.append(f"Lot: {data['lot']}")
-        if data.get("specification"):
-            tooltip.append(f"Spec: {data['specification']}")
-        if data.get("supplier"):
-            tooltip.append(f"Supplier: {data['supplier']}")
-        
-        # Add node
         net.add_node(
             node_id,
-            label=label,
+            label=data["label"],
             shape=shape,
-            color=color,
             size=size,
-            title="<br>".join(tooltip),
+            color=color,
+            opacity=opacity,
+            title=tooltip_html,
             borderWidth=border_width,
+            borderWidthSelected=border_width * 2,
             borderColor=border_color,
             font={
-                "size": 14 + max(0, 2 - abs(level)),  # Larger font for closer nodes
+                "size": 14,
                 "face": "Arial",
-                "color": "#2d3436"
+                "color": "#2d3436",
+                "strokeWidth": 0,
+                "strokeColor": "#ffffff"
+            },
+            shadow={
+                "enabled": True,
+                "color": "rgba(0,0,0,0.15)",
+                "size": 5,
+                "x": 2,
+                "y": 2
             }
         )
     
-    # === EDGE STYLING ===
-    for u, v, data in G.edges(data=True):
-        edge_color, width, dashes = "#bdc3c7", 2, False
+    for u, v, data_edge in G.edges(data=True):
+        edge_color, width, arrows, dashes = "#95a5a6", 2, "to", False
         
-        rel = data.get("relationship", "")
-        if rel == "consumed_by":
-            edge_color = "#e74c3c"  # Red for consumption
-            width = 3
-            dashes = [5, 5]
-        elif rel == "produces":
-            edge_color = "#2ecc71"  # Green for production
-            width = 3
+        if highlight_set and u in highlight_set and v in highlight_set:
+            edge_color, width = "#2c3e50", 4
         
-        # Add quantity label to edge if available
-        edge_label = ""
-        if show_quantities and data.get("quantity"):
-            edge_label = data["quantity"]
-        elif rel:
-            edge_label = rel.replace("_", " ")
+        rel = data_edge.get("relationship", "")
+        if rel == "has_phase":
+            edge_color, dashes = "#3498db", False
+        elif rel == "has_pi":
+            edge_color, dashes = "#9b59b6", [5, 5]
+        elif rel == "next_phase" or rel == "next_step":
+            edge_color, width = "#2ecc71", 3
+        elif rel == "consumed_by":
+            edge_color, dashes = "#e74c3c", [10, 5]
+        elif rel == "produced":
+            edge_color, dashes = "#f39c12", [5, 10]
         
         net.add_edge(
             u, v,
-            label=edge_label,
+            label=data_edge["relationship"],
             color=edge_color,
             width=width,
+            arrows=arrows,
             dashes=dashes,
-            arrows="to",
             font={
-                "size": 11,
-                "align": "middle",
-                "color": edge_color
+                "size": 12,
+                "align": "middle"
             },
             smooth={
                 "type": "cubicBezier",
-                "roundness": 0.3
+                "roundness": 0.4
             }
         )
     
-    # === LAYOUT CONFIGURATION ===
     net.set_options("""
     var options = {
-      "layout": {
-        "hierarchical": {
-          "enabled": true,
-          "levelSeparation": 200,
-          "nodeSpacing": 150,
-          "treeSpacing": 250,
-          "direction": "LR",  // Left to Right flow
-          "sortMethod": "directed"
+      "nodes": {
+        "scaling": {
+          "min": 10,
+          "max": 50,
+          "label": {
+            "enabled": true,
+            "min": 12,
+            "max": 20
+          }
+        }
+      },
+      "edges": {
+        "smooth": {
+          "type": "cubicBezier",
+          "forceDirection": "horizontal",
+          "roundness": 0.4
+        },
+        "font": {
+          "size": 12,
+          "align": "middle"
         }
       },
       "physics": {
         "enabled": true,
-        "hierarchicalRepulsion": {
-          "centralGravity": 0.0,
+        "solver": "forceAtlas2Based",
+        "forceAtlas2Based": {
+          "gravitationalConstant": -100,
+          "centralGravity": 0.01,
           "springLength": 200,
-          "springConstant": 0.01,
-          "nodeDistance": 150,
-          "damping": 0.09
+          "springConstant": 0.05,
+          "damping": 0.4,
+          "avoidOverlap": 1
         },
-        "solver": "hierarchicalRepulsion"
+        "stabilization": {
+          "enabled": true,
+          "iterations": 500,
+          "updateInterval": 25,
+          "fit": true
+        },
+        "timestep": 0.5,
+        "adaptiveTimestep": true
+      },
+      "layout": {
+        "improvedLayout": true,
+        "hierarchical": {
+          "enabled": false
+        }
       },
       "interaction": {
         "dragNodes": true,
+        "dragView": true,
+        "zoomView": true,
         "hover": true,
-        "tooltipDelay": 100
+        "tooltipDelay": 200,
+        "multiselect": true
       }
     }
     """)
     
-    # === LEGEND ===
+    # FIXED LEGEND HTML WITH CLOSING QUOTES
     legend_html = """
     <div style="
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        background: white;
-        padding: 15px;
-        border-radius: 8px;
-        border: 1px solid #ddd;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        font-family: Arial, sans-serif;
-        font-size: 12px;
+        position: absolute; 
+        top: 10px; 
+        right: 10px; 
+        padding: 12px 15px; 
+        font-size: 13px; 
+        background-color: rgba(255,255,255,0.95); 
+        border-radius: 8px; 
+        border: 1px solid #dfe6e9; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         z-index: 1000;
-        max-width: 200px;
+        max-width: 250px;
     ">
-        <div style="font-weight: bold; margin-bottom: 10px; color: #2c3e50;">📦 Batch Genealogy Legend</div>
-        
-        <div style="margin-bottom: 8px;">
-            <div style="display: inline-block; width: 12px; height: 12px; background: #3498db; border: 2px solid #2980b9; margin-right: 8px; border-radius: 
+        <div style="font-weight: bold; margin-bottom: 8px; color: #2d3436; font-size: 14px;">📊 Legend</div>
+        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <div style="width: 12px; height: 12px; background-color: #f39c12; border-radius: 2px; margin-right: 8px;"></div>
+            <span>Batch</span>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <div style="width: 12px; height: 12px; background-color: #2ecc71; border-radius: 2px; margin-right: 8px;"></div>
+            <span>Phase</span>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <div style="width: 12px; height: 12px; background-color: #9b59b6; border-radius: 2px; margin-right: 8px;"></div>
+            <span>PI (PASS)</span>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <div style="width: 12px; height: 12px; background-color: #e74c3c; border-radius: 2px; margin-right: 8px;"></div>
+            <span>PI (FAIL)</span>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+            <div style="width: 12px; height: 12px; background-color: #34495e; border-radius: 2px; margin-right: 8px;"></div>
+            <span>Material</span>
+        </div>
+        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #dfe6e9; font-size: 12px; color: #636e72;">
+            🔸 Click nodes for details<br>
+            🔸 Drag to rearrange<br>
+            🔸 Scroll to zoom
+        </div>
+    </div>
+    """
+    
+    net.save_graph("batch_tree.html")
+    
+    with open("batch_tree.html", "r") as f:
+        html_content = f.read()
+    
+    html_content = html_content.replace('</body>', f'{legend_html}</body>')
+    
+    with open("batch_tree.html", "w") as f:
+        f.write(html_content)
+    
+    components.html(open("batch_tree.html", "r").read(), height=750, scrolling=False)
