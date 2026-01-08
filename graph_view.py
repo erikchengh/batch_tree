@@ -1,83 +1,79 @@
-def render_graph(G, selected_node=None, deviation_only=False, trace_mode="None"):
+from pyvis.network import Network
+import streamlit.components.v1 as components
+import networkx as nx
+import tempfile
+import os
+
+def render_genealogy_graph(G, target_batch_id=None, highlight_upstream=True, highlight_downstream=True):
+    """
+    Render an interactive batch genealogy graph
+    
+    Args:
+        G: NetworkX graph of batch genealogy
+        target_batch_id: Batch to focus on (None for full graph)
+        highlight_upstream: Highlight raw materials feeding into target
+        highlight_downstream: Highlight products using the target
+    """
+    
+    # Create network
     net = Network(
-        height="700px", 
-        width="100%", 
+        height="750px",
+        width="100%",
         directed=True,
         bgcolor="#ffffff",
         font_color="#2d3436"
     )
     
-    net.toggle_physics(False)
-    net.force_atlas_2based(
-        gravity=-100,
-        central_gravity=0.01,
-        spring_length=200,
+    # Configure physics for better layout
+    net.toggle_physics(True)
+    net.barnes_hut(
+        gravity=-2000,
+        central_gravity=0.3,
+        spring_length=150,
         spring_strength=0.05,
-        damping=0.4,
-        overlap=0
+        damping=0.09,
+        overlap=1
     )
     
-    highlight_set = set()
-    if selected_node:
-        if trace_mode == "MaterialGenealogy" and G.nodes[selected_node].get("type") == "Material":
-            highlight_set.add(selected_node)
-            highlight_set.update(nx.ancestors(G, selected_node))
-            highlight_set.update(nx.descendants(G, selected_node))
-        elif trace_mode != "None":
-            highlight_set.add(selected_node)
-            if trace_mode in ["Backward", "Bidirectional"]:
-                highlight_set.update(nx.ancestors(G, selected_node))
-            if trace_mode in ["Forward", "Bidirectional"]:
-                highlight_set.update(nx.descendants(G, selected_node))
+    # Determine which nodes to highlight
+    highlight_nodes = set()
+    if target_batch_id and target_batch_id in G.nodes:
+        highlight_nodes.add(target_batch_id)
+        
+        if highlight_upstream:
+            # Find all ancestors (raw materials feeding into target)
+            highlight_nodes.update(nx.ancestors(G, target_batch_id))
+        
+        if highlight_downstream:
+            # Find all descendants (products using target)
+            highlight_nodes.update(nx.descendants(G, target_batch_id))
     
-    for node_id, data in G.nodes(data=True):
+    # Add nodes with styling
+    for node_id, node_data in G.nodes(data=True):
         opacity = 1.0
-        if deviation_only and data.get("result") != "FAIL":
-            opacity = 0.3
-        if highlight_set and node_id not in highlight_set:
-            opacity = 0.3
+        border_width = 2
         
-        shape, size, color, border_color, border_width = "dot", 20, "#3498db", "#2c3e50", 2
-        
-        if data["type"] == "Batch":
-            shape, size, color, border_color = "star", 35, "#f39c12", "#d68910"
-        elif data["type"] == "Phase":
-            shape, size, color, border_color = "triangle", 28, "#2ecc71", "#27ae60"
-        elif data["type"] == "PI":
-            if data.get("result") == "FAIL":
-                shape, size, color, border_color = "box", 25, "#e74c3c", "#c0392b"
+        # Highlight target and related nodes
+        if highlight_nodes:
+            if node_id in highlight_nodes:
+                border_width = 4
             else:
-                shape, size, color, border_color = "box", 25, "#9b59b6", "#8e44ad"
-        elif data["type"] == "Material":
-            shape, size, color, border_color = "ellipse", 22, "#34495e", "#2c3e50"
+                opacity = 0.3
         
-        if node_id == selected_node:
-            shape, size, color, border_color, border_width = "diamond", 35, "#f1c40f", "#f39c12", 3
-        
-        tooltip_lines = [f"<b>{data['label']}</b>", f"Type: {data['type']}"]
-        if data.get("result"):
-            tooltip_lines.append(f"Result: {data['result']}")
-        for k in ["parameters", "limits", "timestamp", "deviation", "product", "status"]:
-            if k in data and data[k]:
-                if isinstance(data[k], dict):
-                    tooltip_lines.append(f"{k}: {json.dumps(data[k], indent=2).replace('\"', '')}")
-                else:
-                    tooltip_lines.append(f"{k}: {data[k]}")
-        tooltip_html = "<br>".join(tooltip_lines)
-        
+        # Add the node
         net.add_node(
             node_id,
-            label=data["label"],
-            shape=shape,
-            size=size,
-            color=color,
+            label=node_data["label"],
+            color=node_data["color"],
+            shape=node_data["shape"],
+            size=node_data["size"],
+            title=generate_node_tooltip(node_data),
             opacity=opacity,
-            title=tooltip_html,
             borderWidth=border_width,
             borderWidthSelected=border_width * 2,
-            borderColor=border_color,
+            borderColor="#2c3e50",
             font={
-                "size": 14,
+                "size": node_data["size"] / 1.5,
                 "face": "Arial",
                 "color": "#2d3436",
                 "strokeWidth": 0,
@@ -85,161 +81,209 @@ def render_graph(G, selected_node=None, deviation_only=False, trace_mode="None")
             },
             shadow={
                 "enabled": True,
-                "color": "rgba(0,0,0,0.15)",
+                "color": "rgba(0,0,0,0.1)",
                 "size": 5,
                 "x": 2,
                 "y": 2
             }
         )
     
-    for u, v, data_edge in G.edges(data=True):
-        edge_color, width, arrows, dashes = "#95a5a6", 2, "to", False
+    # Add edges with styling
+    for u, v, edge_data in G.edges(data=True):
+        edge_opacity = 0.7
+        edge_width = 2
         
-        if highlight_set and u in highlight_set and v in highlight_set:
-            edge_color, width = "#2c3e50", 4
-        
-        rel = data_edge.get("relationship", "")
-        if rel == "has_phase":
-            edge_color, dashes = "#3498db", False
-        elif rel == "has_pi":
-            edge_color, dashes = "#9b59b6", [5, 5]
-        elif rel == "next_phase" or rel == "next_step":
-            edge_color, width = "#2ecc71", 3
-        elif rel == "consumed_by":
-            edge_color, dashes = "#e74c3c", [10, 5]
-        elif rel == "produced":
-            edge_color, dashes = "#f39c12", [5, 10]
+        # Highlight edges connected to target
+        if highlight_nodes and (u in highlight_nodes or v in highlight_nodes):
+            edge_opacity = 1.0
+            edge_width = 3
         
         net.add_edge(
             u, v,
-            label=data_edge["relationship"],
-            color=edge_color,
-            width=width,
-            arrows=arrows,
-            dashes=dashes,
-            font={
-                "size": 12,
-                "align": "middle"
-            },
+            label=edge_data["label"],
+            color=edge_data["color"],
+            width=edge_width,
+            arrows="to",
+            opacity=edge_opacity,
             smooth={
                 "type": "cubicBezier",
-                "roundness": 0.4
+                "roundness": 0.3
+            },
+            font={
+                "size": 11,
+                "align": "middle",
+                "color": "#7f8c8d"
             }
         )
     
+    # Configure layout options
     net.set_options("""
     var options = {
-      "nodes": {
-        "scaling": {
-          "min": 10,
-          "max": 50,
-          "label": {
-            "enabled": true,
-            "min": 12,
-            "max": 20
-          }
-        }
-      },
-      "edges": {
-        "smooth": {
-          "type": "cubicBezier",
-          "forceDirection": "horizontal",
-          "roundness": 0.4
-        },
-        "font": {
-          "size": 12,
-          "align": "middle"
-        }
-      },
       "physics": {
         "enabled": true,
-        "solver": "forceAtlas2Based",
-        "forceAtlas2Based": {
-          "gravitationalConstant": -100,
-          "centralGravity": 0.01,
-          "springLength": 200,
+        "solver": "barnesHut",
+        "barnesHut": {
+          "gravitationalConstant": -2000,
+          "centralGravity": 0.3,
+          "springLength": 150,
           "springConstant": 0.05,
-          "damping": 0.4,
+          "damping": 0.09,
           "avoidOverlap": 1
         },
         "stabilization": {
           "enabled": true,
-          "iterations": 500,
-          "updateInterval": 25,
+          "iterations": 1000,
+          "updateInterval": 100,
+          "onlyDynamicEdges": false,
           "fit": true
         },
-        "timestep": 0.5,
-        "adaptiveTimestep": true
-      },
-      "layout": {
-        "improvedLayout": true,
-        "hierarchical": {
-          "enabled": false
-        }
+        "timestep": 0.5
       },
       "interaction": {
         "dragNodes": true,
         "dragView": true,
         "zoomView": true,
         "hover": true,
-        "tooltipDelay": 200,
-        "multiselect": true
+        "tooltipDelay": 100,
+        "multiselect": true,
+        "navigationButtons": true
+      },
+      "edges": {
+        "smooth": {
+          "type": "cubicBezier",
+          "roundness": 0.3
+        },
+        "arrows": {
+          "to": {
+            "enabled": true,
+            "scaleFactor": 0.8
+          }
+        }
       }
     }
     """)
     
-    # FIXED LEGEND HTML WITH CLOSING QUOTES
-    legend_html = """
+    # Save to temporary file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as tmp:
+        net.save_graph(tmp.name)
+        tmp_path = tmp.name
+    
+    # Read and inject custom CSS/legend
+    with open(tmp_path, 'r') as f:
+        html_content = f.read()
+    
+    # Add legend and custom styling
+    legend_html = generate_legend_html()
+    html_content = html_content.replace(
+        '</body>',
+        f'{legend_html}\n</body>'
+    )
+    
+    # Write back
+    with open(tmp_path, 'w') as f:
+        f.write(html_content)
+    
+    # Render in Streamlit
+    with open(tmp_path, 'r') as f:
+        components.html(f.read(), height=800, scrolling=False)
+    
+    # Clean up
+    os.unlink(tmp_path)
+
+def generate_node_tooltip(node_data):
+    """Generate HTML tooltip for node"""
+    tooltip = f"""
+    <div style="padding: 10px; font-family: Arial; max-width: 300px;">
+        <div style="font-weight: bold; font-size: 14px; margin-bottom: 5px; color: {node_data['color']};">
+            {node_data['label'].split('\\n')[0]}
+        </div>
+        <div style="font-size: 12px; margin-bottom: 3px;">
+            <b>Material:</b> {node_data['material']}
+        </div>
+        <div style="font-size: 12px; margin-bottom: 3px;">
+            <b>Type:</b> {node_data['type']}
+        </div>
+        <div style="font-size: 12px; margin-bottom: 3px;">
+            <b>Quantity:</b> {node_data['quantity']}
+        </div>
+    """
+    
+    if node_data.get('product'):
+        tooltip += f"""
+        <div style="font-size: 12px; margin-bottom: 3px;">
+            <b>Product:</b> {node_data['product']}
+        </div>
+        """
+    
+    if node_data.get('status'):
+        tooltip += f"""
+        <div style="font-size: 12px; margin-bottom: 3px;">
+            <b>Status:</b> {node_data['status']}
+        </div>
+        """
+    
+    if node_data.get('quality'):
+        tooltip += f"""
+        <div style="font-size: 12px; margin-bottom: 3px;">
+            <b>Quality:</b> {node_data['quality']}
+        </div>
+        """
+    
+    tooltip += "</div>"
+    return tooltip
+
+def generate_legend_html():
+    """Generate HTML legend for the graph"""
+    return """
     <div style="
-        position: absolute; 
-        top: 10px; 
-        right: 10px; 
-        padding: 12px 15px; 
-        font-size: 13px; 
-        background-color: rgba(255,255,255,0.95); 
-        border-radius: 8px; 
-        border: 1px solid #dfe6e9; 
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        padding: 15px;
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+        background-color: rgba(255, 255, 255, 0.95);
+        border-radius: 8px;
+        border: 1px solid #dfe6e9;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         z-index: 1000;
-        max-width: 250px;
+        max-width: 220px;
     ">
-        <div style="font-weight: bold; margin-bottom: 8px; color: #2d3436; font-size: 14px;">📊 Legend</div>
-        <div style="display: flex; align-items: center; margin-bottom: 6px;">
-            <div style="width: 12px; height: 12px; background-color: #f39c12; border-radius: 2px; margin-right: 8px;"></div>
-            <span>Batch</span>
+        <div style="font-weight: bold; margin-bottom: 10px; font-size: 14px; color: #2d3436;">
+            📊 Batch Genealogy Legend
         </div>
-        <div style="display: flex; align-items: center; margin-bottom: 6px;">
-            <div style="width: 12px; height: 12px; background-color: #2ecc71; border-radius: 2px; margin-right: 8px;"></div>
-            <span>Phase</span>
+        
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+            <div style="width: 12px; height: 12px; background-color: #3498db; border-radius: 50%; margin-right: 8px;"></div>
+            <span>Raw Material</span>
         </div>
-        <div style="display: flex; align-items: center; margin-bottom: 6px;">
-            <div style="width: 12px; height: 12px; background-color: #9b59b6; border-radius: 2px; margin-right: 8px;"></div>
-            <span>PI (PASS)</span>
+        
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+            <div style="width: 12px; height: 12px; background-color: #9b59b6; border-radius: 3px; margin-right: 8px;"></div>
+            <span>Intermediate Batch</span>
         </div>
-        <div style="display: flex; align-items: center; margin-bottom: 6px;">
-            <div style="width: 12px; height: 12px; background-color: #e74c3c; border-radius: 2px; margin-right: 8px;"></div>
-            <span>PI (FAIL)</span>
+        
+        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+            <div style="width: 12px; height: 12px; background-color: #2ecc71; border-radius: 0 50% 50% 50%; transform: rotate(45deg); margin-right: 8px;"></div>
+            <span>Finished Product</span>
         </div>
-        <div style="display: flex; align-items: center; margin-bottom: 6px;">
-            <div style="width: 12px; height: 12px; background-color: #34495e; border-radius: 2px; margin-right: 8px;"></div>
-            <span>Material</span>
+        
+        <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #dfe6e9;">
+            <div style="font-weight: bold; margin-bottom: 5px; color: #636e72; font-size: 11px;">EDGES:</div>
+            <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                <div style="width: 20px; height: 2px; background-color: #e74c3c; margin-right: 8px;"></div>
+                <span>Material Consumption</span>
+            </div>
+            <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                <div style="width: 20px; height: 2px; background-color: #3498db; margin-right: 8px;"></div>
+                <span>Process Sequence</span>
+            </div>
         </div>
-        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #dfe6e9; font-size: 12px; color: #636e72;">
+        
+        <div style="margin-top: 10px; font-size: 11px; color: #636e72;">
             🔸 Click nodes for details<br>
-            🔸 Drag to rearrange<br>
-            🔸 Scroll to zoom
+            🔸 Drag to rearrange layout<br>
+            🔸 Scroll to zoom in/out
         </div>
     </div>
     """
-    
-    net.save_graph("batch_tree.html")
-    
-    with open("batch_tree.html", "r") as f:
-        html_content = f.read()
-    
-    html_content = html_content.replace('</body>', f'{legend_html}</body>')
-    
-    with open("batch_tree.html", "w") as f:
-        f.write(html_content)
-    
-    components.html(open("batch_tree.html", "r").read(), height=750, scrolling=False)
