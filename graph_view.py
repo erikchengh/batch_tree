@@ -244,7 +244,7 @@ def get_pharma_node_styling(node_data, node_id, target_batch_id, is_highlighted)
         },
         "Finished Product": {
             "Tablet": {"color": "#00c853", "border": "#1b5e20"},  # Bright green for tablets
-            "Capsule": {"color": "#ff4081", "border": "#c51162"},  Pink for capsules
+            "Capsule": {"color": "#ff4081", "border": "#c51162"},  # Pink for capsules
             "Injection": {"color": "#2962ff", "border": "#0039cb"},  # Blue for injections
             "default": {"color": "#00bfa5", "border": "#00796b"}  # Teal for others
         }
