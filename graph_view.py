@@ -48,7 +48,7 @@ def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
             color=styling["color"],
             shape=styling["shape"],
             size=styling["size"],
-            title=generate_pharma_tooltip(node_data),
+            title=generate_pharma_tooltip(node_data, node_id),
             borderWidth=styling["border_width"],
             borderColor=styling["border_color"],
             x=pos["x"],
@@ -63,7 +63,7 @@ def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
                 "align": "center",
                 "bold": styling["bold"]
             },
-            image=styling.get("image"),  # For icon nodes
+            image=styling.get("image"),
             brokenImage=None
         )
     
@@ -88,7 +88,7 @@ def render_genealogy_graph(G, target_batch_id=None, trace_mode="none"):
     config = {
         "physics": {"enabled": False},
         "interaction": {
-            "dragNodes": True,  # Allow repositioning for clarity
+            "dragNodes": True,
             "dragView": True,
             "zoomView": True,
             "hover": True,
@@ -231,22 +231,22 @@ def get_pharma_node_styling(node_data, node_id, target_batch_id, is_highlighted)
     # Pharma Color Scheme
     pharma_colors = {
         "Raw Material": {
-            "API": {"color": "#1e88e5", "border": "#0d47a1"},  # Blue for API
-            "Excipient": {"color": "#43a047", "border": "#1b5e20"},  # Green for excipients
-            "Solvent": {"color": "#5e35b1", "border": "#311b92"},  # Purple for solvents
-            "default": {"color": "#78909c", "border": "#37474f"}  # Gray for others
+            "API": {"color": "#1e88e5", "border": "#0d47a1"},
+            "Excipient": {"color": "#43a047", "border": "#1b5e20"},
+            "Solvent": {"color": "#5e35b1", "border": "#311b92"},
+            "default": {"color": "#78909c", "border": "#37474f"}
         },
         "Intermediate": {
-            "Blend": {"color": "#ff9800", "border": "#e65100"},  # Orange for blends
-            "Solution": {"color": "#00acc1", "border": "#006064"},  # Cyan for solutions
-            "Granulation": {"color": "#8e24aa", "border": "#4a148c"},  # Purple for granulation
+            "Blend": {"color": "#ff9800", "border": "#e65100"},
+            "Solution": {"color": "#00acc1", "border": "#006064"},
+            "Granulation": {"color": "#8e24aa", "border": "#4a148c"},
             "default": {"color": "#fb8c00", "border": "#e65100"}
         },
         "Finished Product": {
-            "Tablet": {"color": "#00c853", "border": "#1b5e20"},  # Bright green for tablets
-            "Capsule": {"color": "#ff4081", "border": "#c51162"},  # Pink for capsules
-            "Injection": {"color": "#2962ff", "border": "#0039cb"},  # Blue for injections
-            "default": {"color": "#00bfa5", "border": "#00796b"}  # Teal for others
+            "Tablet": {"color": "#00c853", "border": "#1b5e20"},
+            "Capsule": {"color": "#ff4081", "border": "#c51162"},
+            "Injection": {"color": "#2962ff", "border": "#0039cb"},
+            "default": {"color": "#00bfa5", "border": "#00796b"}
         }
     }
     
@@ -287,7 +287,7 @@ def get_pharma_node_styling(node_data, node_id, target_batch_id, is_highlighted)
         size = 45
         border_width = 4
         font_size = 16
-        font_color = "#d84315"  # Deep orange for target
+        font_color = "#d84315"
         bold = True
         shadow = True
     elif is_highlighted:
@@ -355,31 +355,31 @@ def get_pharma_edge_styling(u, v, edge_data, highlight_edges, target_batch_id):
     
     # Pharma edge styling
     if is_highlighted:
-        color = "#d32f2f"  # Red for critical trace
+        color = "#d32f2f"
         width = 4
         opacity = 1.0
         dashes = False
         font_color = "#d32f2f"
     elif is_target_edge:
-        color = "#ff9800"  # Orange for target-related
+        color = "#ff9800"
         width = 3
         opacity = 0.9
         dashes = [5, 5]
         font_color = "#ff9800"
     elif relationship == "consumed_by":
-        color = "#78909c"  # Gray for consumption
+        color = "#78909c"
         width = 2
         opacity = 0.7
         dashes = False
         font_color = "#546e7a"
     elif relationship == "produces":
-        color = "#4caf50"  # Green for production
+        color = "#4caf50"
         width = 2
         opacity = 0.7
         dashes = [10, 5]
         font_color = "#2e7d32"
     else:
-        color = "#b0bec5"  # Light gray for others
+        color = "#b0bec5"
         width = 1
         opacity = 0.5
         dashes = True
@@ -432,12 +432,16 @@ def format_edge_label(edge_data):
     
     return display_rel
 
-def generate_pharma_tooltip(node_data):
+def generate_pharma_tooltip(node_data, node_id):
     """Generate professional pharmaceutical tooltip"""
+    # Extract batch label for tooltip header
+    label_parts = node_data.get("label", "Pharma Batch").split('\n')
+    batch_label = label_parts[0] if len(label_parts) > 0 else "Pharma Batch"
+    
     tooltip = f"""
     <div style="padding: 12px; font-family: 'Arial', sans-serif; max-width: 350px; background: white; border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.15); border-left: 4px solid {node_data.get('color', '#1e88e5')};">
         <div style="font-weight: 700; font-size: 14px; margin-bottom: 8px; color: #1a237e; border-bottom: 2px solid #e8eaf6; padding-bottom: 6px;">
-            🏭 {node_data.get('label', 'Pharma Batch').split('\\n')[0]}
+            🏭 {batch_label}
         </div>
         
         <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
@@ -445,13 +449,13 @@ def generate_pharma_tooltip(node_data):
     
     # Pharma-specific fields in order of importance
     fields = [
-        ("📦 Material", node_data.get("material"), "#1a3c6e"),
-        ("🏷️ Type", node_data.get("type"), "#1e88e5"),
-        ("⚖️ Quantity", node_data.get("quantity"), "#43a047"),
-        ("💊 Product", node_data.get("product"), "#8e24aa"),
-        ("📊 Status", node_data.get("status"), "#fb8c00"),
-        ("✅ Quality", node_data.get("quality"), "#00acc1"),
-        ("🔢 Batch ID", node_data.get("batch_id"), "#546e7a")
+        ("📦", "Material", node_data.get("material", ""), "#1a3c6e"),
+        ("🏷️", "Type", node_data.get("type", ""), "#1e88e5"),
+        ("⚖️", "Quantity", node_data.get("quantity", ""), "#43a047"),
+        ("💊", "Product", node_data.get("product", ""), "#8e24aa"),
+        ("📊", "Status", node_data.get("status", ""), "#fb8c00"),
+        ("✅", "Quality", node_data.get("quality", ""), "#00acc1"),
+        ("🔢", "Batch ID", node_id, "#546e7a")
     ]
     
     for icon, label, value, color in fields:
@@ -460,6 +464,17 @@ def generate_pharma_tooltip(node_data):
             <tr>
                 <td style="padding: 4px 0; color: #546e7a; font-weight: 500; width: 40%;">{icon} {label}:</td>
                 <td style="padding: 4px 0; color: {color}; font-weight: 600; text-align: right;">{value}</td>
+            </tr>
+            """
+    
+    # Add additional fields if they exist
+    additional_fields = ["lot", "expiry_date", "manufacturer", "location"]
+    for field in additional_fields:
+        if field in node_data:
+            tooltip += f"""
+            <tr>
+                <td style="padding: 4px 0; color: #546e7a; font-weight: 500;">📋 {field.title()}:</td>
+                <td style="padding: 4px 0; color: #757575; font-weight: 500; text-align: right;">{node_data[field]}</td>
             </tr>
             """
     
